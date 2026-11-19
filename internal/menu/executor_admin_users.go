@@ -34,6 +34,13 @@ func runListUsers(c *cmdCtx, args string) (*user.User, string, error) {
 
 	slog.Debug("running LISTUSERS", "node", nodeNumber)
 
+	switch scripted, err := scriptedUserList(c); {
+	case err != nil:
+		return nil, "LOGOFF", err
+	case scripted:
+		return nil, "", nil
+	}
+
 	// 1. Load Templates (Corrected filenames)
 	topTemplatePath := e.templateFile("USERLIST.TOP")
 	midTemplatePath := e.templateFile("USERLIST.MID")

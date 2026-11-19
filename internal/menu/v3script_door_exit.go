@@ -15,13 +15,17 @@ var v3ScriptRunLimit = config.DoorConfig.ScriptRunLimit
 // v3ScriptRunError is what a v3_script door returns for runErr, a non-nil
 // error from the script engine's Run. A caller hanging up and a script
 // reaching its run time limit are normal ends (nil), so the caller isn't
-// stopped at an error prompt; anything else is logged and returned.
+// stopped at an error prompt. A script stopped for a notice returns
+// scripting.ErrNotice, for the menu that set ScriptConfig.Notice. Anything
+// else is logged and returned.
 func v3ScriptRunError(ctx *DoorCtx, runErr error) error {
 	switch {
 	case errors.Is(runErr, scripting.ErrDisconnect):
 		slog.Info("user disconnected from V3 script",
 			"node", ctx.NodeNumber, "door", ctx.DoorName)
 		return nil
+	case errors.Is(runErr, scripting.ErrNotice):
+		return runErr
 	case errors.Is(runErr, scripting.ErrTimeout):
 		slog.Info("V3 script reached its run time limit",
 			"node", ctx.NodeNumber, "door", ctx.DoorName, "max_run_minutes", ctx.Config.MaxRunMinutes)

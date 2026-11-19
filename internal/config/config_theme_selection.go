@@ -26,6 +26,11 @@ type ThemeSelection struct {
 	// Konfig (#1099). Omitted means they may; false keeps every caller on
 	// Name. See CallersChooseTheme.
 	CallerChoice *bool `json:"callerChoice,omitempty"`
+	// Labels are the board's names and descriptions for installed themes,
+	// by directory name, over what each theme's theme.json says. They
+	// let a board label a theme whose directory it keeps as shipped, such
+	// as menus/v3. See ThemeLabelFor.
+	Labels map[string]ThemeLabel `json:"labels,omitempty"`
 }
 
 // CallersChooseTheme reports whether callers may choose their own theme:

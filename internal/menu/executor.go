@@ -15,6 +15,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
+	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
@@ -109,8 +110,14 @@ type MenuExecutor struct {
 	// ever holds a reference into a shared snapshot; GetDoorConfig reads the
 	// shared map without cloning, which is safe because it returns a value.
 	stringsCfg atomic.Pointer[config.StringsConfig]
-	themeCfg   atomic.Pointer[config.ThemeConfig] // as drawn: themeBase with the board's colours
-	themeBase  atomic.Pointer[config.ThemeConfig] // the theme's own theme.json
+	// themeStrings is the strings.json of the theme this executor draws
+	// (the board's own, or a view's), and themedStrings the board's
+	// strings with it over them, rebuilt when either is a newer snapshot
+	// than the one it was made from. See Strings.
+	themeStrings  atomic.Pointer[config.ThemeStrings]
+	themedStrings atomic.Pointer[themedStringsCache]
+	themeCfg      atomic.Pointer[config.ThemeConfig] // as drawn: themeBase with the board's colours
+	themeBase     atomic.Pointer[config.ThemeConfig] // the theme's own theme.json
 	// themeMu serialises SetTheme and SetServerConfig, each of which stores
 	// its half and rebuilds themeCfg from both, and SetStrings, which with
 	// them rebuilds slotDefaults. They run on different goroutines (the
@@ -136,7 +143,10 @@ type MenuExecutor struct {
 	parent      *MenuExecutor
 	forTheme    string
 	sharesTheme bool
-	viewSlots   atomic.Pointer[viewSlotCache] // a view's slot defaults; see viewSlotDefaults
+	// menuSet, when set, is the menu set Menus returns in place of the one
+	// MenuSetPath names: the pre-login view's (preloginView).
+	menuSet   *menuset.Set
+	viewSlots atomic.Pointer[viewSlotCache] // a view's slot defaults; see viewSlotDefaults
 }
 
 // shared is the executor that holds the board's hot-reloadable config:
@@ -170,6 +180,7 @@ func NewExecutor(menuSetPath, rootConfigPath, rootAssetsPath string, oneLiners [
 	}
 	e.SetDoorRegistry(doorRegistry)
 	e.SetStrings(loadedStrings)
+	e.ReloadThemeStrings()
 	e.SetTheme(theme)
 	e.SetServerConfig(serverCfg)
 	e.SetLoginSequence(loginSequence)
@@ -305,12 +316,33 @@ func (e *MenuExecutor) SetStrings(strings config.StringsConfig) {
 	e.applyColorSlotDefaults()
 }
 
-// Strings returns the current strings configuration.
+// Strings returns the strings the executor prints: the board's
+// configs/strings.json (SetStrings), with the strings.json of the theme it
+// draws over them. That is the board's theme for the board and for screens
+// before login, and a caller's own theme on their view.
 //
 // A pointer, not a copy: StringsConfig is several hundred fields and this is
 // the hottest accessor in the package, called once per displayed string. The
-// value behind it is shared and must not be mutated.
+// value behind it is shared and must not be mutated. Without theme strings
+// it is the board's own snapshot; with them, a merged copy kept until the
+// board's strings or the theme's reload.
 func (e *MenuExecutor) Strings() *config.StringsConfig {
+	base := e.boardStrings()
+	owner := e.themeOwner()
+	theme := owner.themeStrings.Load()
+	if theme.Empty() {
+		return base
+	}
+	if c := owner.themedStrings.Load(); c != nil && c.base == base && c.theme == theme {
+		return c.merged
+	}
+	merged := base.WithTheme(theme)
+	owner.themedStrings.Store(&themedStringsCache{base: base, theme: theme, merged: &merged})
+	return &merged
+}
+
+// boardStrings is the board's configs/strings.json, as SetStrings stored it.
+func (e *MenuExecutor) boardStrings() *config.StringsConfig {
 	e = e.shared()
 	if p := e.stringsCfg.Load(); p != nil {
 		return p
@@ -319,6 +351,36 @@ func (e *MenuExecutor) Strings() *config.StringsConfig {
 	// zero config keeps callers from dereferencing nil; every string reads as
 	// empty, which their existing empty-string fallbacks already handle.
 	return &config.StringsConfig{}
+}
+
+// themeOwner is the executor holding the theme e draws: the board, for the
+// board and for a view on the board's theme, else the view itself.
+func (e *MenuExecutor) themeOwner() *MenuExecutor {
+	if e.sharesTheme {
+		return e.parent
+	}
+	return e
+}
+
+// themedStringsCache is the board's strings with a theme's over them, and
+// the snapshots they were made from.
+type themedStringsCache struct {
+	base   *config.StringsConfig
+	theme  *config.ThemeStrings
+	merged *config.StringsConfig
+}
+
+// ReloadThemeStrings reads the strings.json of the theme e draws, with its
+// overlay, again. A file that can't be read or parsed is logged and the
+// strings loaded before stay.
+func (e *MenuExecutor) ReloadThemeStrings() {
+	e = e.themeOwner()
+	theme, err := config.LoadThemeStrings(e.MenuSetPath)
+	if err != nil {
+		slog.Error("theme strings not loaded; keeping the ones loaded before", "theme", e.MenuSetPath, "error", err)
+		return
+	}
+	e.themeStrings.Store(theme)
 }
 
 // SetTheme atomically updates the theme configuration: the selected
@@ -500,6 +562,16 @@ func (e *MenuExecutor) isCoSysOpOrAbove(u *user.User) bool {
 	return u != nil && u.AccessLevel >= e.GetServerConfig().CoSysOpLevel
 }
 
+// hiddenOnline reports whether a session that is invisible or a test login
+// is left out of the online lists viewer sees: an invisible session is
+// shown from co-sysop level up, a test login only from sysop level.
+func (e *MenuExecutor) hiddenOnline(viewer *user.User, invisible, testLogin bool) bool {
+	if testLogin && !e.isSysOpOrAbove(viewer) {
+		return true
+	}
+	return invisible && !e.isCoSysOpOrAbove(viewer)
+}
+
 // isSysOpOrAbove returns true if the user has SysOp access level. Handlers use
 // this instead of comparing against a literal 255 so a board that sets
 // sysOpLevel lower in config.json gets the same answer everywhere.
@@ -608,7 +680,7 @@ func (e *MenuExecutor) timeLeftWarning(s ssh.Session) (string, bool) {
 	case stringhook.Script, stringhook.File:
 		return value, true
 	}
-	return fmt.Sprintf(e.Strings().TimeLimitWarning, minutes), true
+	return fmt.Sprintf(value, minutes), true
 }
 
 // timeLeftWarningMinutes returns the minutes left for the time-limit

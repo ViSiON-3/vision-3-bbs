@@ -24,7 +24,8 @@ func newUserProviders(t *testing.T) (*Providers, string) {
 		{ID: 1, Handle: "Sysop", RealName: "Sy Op", AccessLevel: 255, Validated: true, TimesCalled: 99,
 			CreatedAt: time.Unix(1000, 0), LastLogin: time.Unix(2000, 0), PasswordHash: "secret-hash", PrivateNote: "private"},
 		{ID: 7, Handle: "Tester", RealName: "Test User", AccessLevel: 50, TimesCalled: 12, GroupLocation: "Testville",
-			MessagesPosted: 4, NumUploads: 2, NumDownloads: 3, FilePoints: 11, Validated: true},
+			MessagesPosted: 4, NumUploads: 2, NumDownloads: 3, FilePoints: 11, Validated: true,
+			UploadedBytes: 2048, DownloadedBytes: 4096},
 	}
 	raw, err := json.Marshal(users)
 	if err != nil {
@@ -124,10 +125,42 @@ func TestUsersObject(t *testing.T) {
 		{`String(v3.users.get("nobody"))`, "null"},
 		{`String(v3.users.get())`, "null"},
 		{`v3.users.getByID(7).realName`, "Test User"},
+		{`v3.users.getByID(7).uploadedBytes + "/" + v3.users.getByID(7).downloadedBytes`, "2048/4096"},
+		{`v3.user.uploadedBytes + "/" + v3.user.downloadedBytes`, "2048/4096"},
 		{`String(v3.users.getByID(12345))`, "null"},
 		{`String(v3.users.getByID())`, "null"},
 		{`String(v3.users.count())`, "2"},
 		{`v3.users.list().map(function(u){return u.id}).sort().join(",")`, "1,7"},
+	}
+	for _, tt := range tests {
+		if got := h.eval(tt.expr).String(); got != tt.want {
+			t.Errorf("%s = %q, want %q", tt.expr, got, tt.want)
+		}
+	}
+}
+
+// TestUsersLastCallers lists calls newest first, skips invisible logins
+// and honours the limit.
+func TestUsersLastCallers(t *testing.T) {
+	p, _ := newUserProviders(t)
+	start := time.Unix(5000, 0)
+	for i, rec := range []user.CallRecord{
+		{UserID: 7, Handle: "Tester", GroupLocation: "Testville", NodeID: 1, Duration: 6 * time.Minute, From: "MO/US"},
+		{UserID: 1, Handle: "Sysop", NodeID: 2, Invisible: true},
+		{UserID: 1, Handle: "Sysop", NodeID: 1, Duration: 90 * time.Second, From: "LAN"},
+	} {
+		rec.ConnectTime = start.Add(time.Duration(i) * time.Hour)
+		rec.DisconnectTime = rec.ConnectTime.Add(rec.Duration)
+		p.UserMgr.AddCallRecord(rec)
+	}
+	h := newHarness(t, harnessOpts{providers: p})
+	tests := []struct{ expr, want string }{
+		{`v3.users.lastCallers().map(function(c){return c.handle}).join(",")`, "Sysop,Tester"},
+		{`v3.users.lastCallers(1).length`, "1"},
+		{`v3.users.lastCallers(0).length`, "2"},
+		{`var c = v3.users.lastCallers()[1]; [c.userID, c.location, c.node, c.minutes, c.from, c.connectTime].join("|")`,
+			"7|Testville|1|6|MO/US|5000"},
+		{`v3.users.lastCallers()[0].minutes`, "1"},
 	}
 	for _, tt := range tests {
 		if got := h.eval(tt.expr).String(); got != tt.want {

@@ -33,6 +33,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/stringhook"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
@@ -299,7 +300,8 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 		return false, answer, nil
 	}
 	u := hs.currentUser()
-	if u == nil {
+	guest := u == nil
+	if guest && kind != scripting.PromptPause {
 		// Before login there is no user for the door's dropfile and ACS check.
 		// Not logged: login screens are shown on every connection.
 		return false, answer, nil
@@ -322,7 +324,18 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 		return false, answer, nil
 	}
 	startTime := hs.startTime()
-	if !doorAllowed(doorConfig, u, hs.s, terminal, startTime) {
+	if guest {
+		// The pause prompt is shown before login too: on the connection
+		// matrix, the signup form and the required-intro gate. Its script
+		// runs there as a guest, with no user record, so only a door with no
+		// access level or ACS, which every caller passes, is run.
+		if !doorRulesPass(doorConfig, 0, func(string) bool { return false }) {
+			slog.Debug("string script door has an access rule, printed as text before login",
+				"door", name, "required", doorConfig.MinAccessLevel, "acs", doorConfig.ACS)
+			return false, answer, nil
+		}
+		u = &user.User{}
+	} else if !doorAllowed(doorConfig, u, hs.s, terminal, startTime) {
 		// Expected for a string shown to every caller but scripted only for
 		// some, so not a warning.
 		slog.Debug("string script door not allowed for caller, printed as text",
@@ -350,8 +363,12 @@ func (e *MenuExecutor) runStringScript(terminal *term.Terminal, outputMode ansi.
 		width, height,
 		hs.bbs.NodeID, startTime, outputMode,
 		doorConfig, name)
-	ctx.UserManager = hs.userMgr
-	ctx.CurrentUser = u
+	if guest {
+		ctx.Guest = true
+	} else {
+		ctx.UserManager = hs.userMgr
+		ctx.CurrentUser = u
+	}
 	ctx.Prompt = kind
 	// A door is not started once the caller's time is up, which is exactly
 	// when the time-limit notice is shown: print that value as text.

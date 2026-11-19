@@ -251,50 +251,57 @@ func editFields() []fieldDef {
 		membershipFieldDef(),
 		namedFlagsFieldDef(),
 		{
+			// A test account's logins leave no caller history, are not
+			// counted or announced, and only a sysop sees it online.
+			Label: "Test Account", Type: ftYesNo, Col: 50, Row: 15, Width: 1,
+			Get: func(u *user.User) string { return uitext.BoolToYN(u.TestAccount) },
+			Set: func(u *user.User, val string) error { u.TestAccount = uitext.YNToBool(val); return nil },
+		},
+		{
 			// Limits the account's WFC console to watching; the daemon
 			// refuses its kick, snoop, type-in and chat.
-			Label: "WFC Read Only", Type: ftYesNo, Col: 50, Row: 15, Width: 1,
+			Label: "WFC Read Only", Type: ftYesNo, Col: 50, Row: 16, Width: 1,
 			Get: func(u *user.User) string { return uitext.BoolToYN(u.WFCReadOnly) },
 			Set: func(u *user.User, val string) error { u.WFCReadOnly = uitext.YNToBool(val); return nil },
 		},
 		// Opens the ACS tester for this user (acstester.go).
 		acsTestFieldDef(),
 
-		// Row 17: separator rendered by view_edit.go
+		// Row 18: separator rendered by view_edit.go
 
-		// Read-only display fields (rows 18-21, below separator)
+		// Read-only display fields (rows 19-22, below separator)
 		// Left column display fields
 		{
-			Label: "Num Uploads", Type: ftDisplay, Col: 3, Row: 18, Width: 6,
+			Label: "Num Uploads", Type: ftDisplay, Col: 3, Row: 19, Width: 6,
 			Get: func(u *user.User) string { return strconv.Itoa(u.NumUploads) },
 		},
 		{
-			Label: "Msgs Posted", Type: ftDisplay, Col: 3, Row: 19, Width: 6,
+			Label: "Msgs Posted", Type: ftDisplay, Col: 3, Row: 20, Width: 6,
 			Get: func(u *user.User) string { return strconv.Itoa(u.MessagesPosted) },
 		},
 		{
-			Label: "InfoForms", Type: ftDisplay, Col: 3, Row: 20, Width: 24,
+			Label: "InfoForms", Type: ftDisplay, Col: 3, Row: 21, Width: 24,
 			// Get is set dynamically by Model after creation (needs dataDir)
 		},
 		{
-			Label: "Auto Purge", Type: ftDisplay, Col: 3, Row: 21, Width: 16,
+			Label: "Auto Purge", Type: ftDisplay, Col: 3, Row: 22, Width: 16,
 			// Get is set dynamically by Model after creation (needs retentionDays)
 		},
 		// Right column display fields
 		{
-			Label: "Created", Type: ftDisplay, Col: 50, Row: 18, Width: 16,
+			Label: "Created", Type: ftDisplay, Col: 50, Row: 19, Width: 16,
 			Get: func(u *user.User) string { return formatTime(u.CreatedAt) },
 		},
 		{
-			Label: "Updated", Type: ftDisplay, Col: 50, Row: 19, Width: 16,
+			Label: "Updated", Type: ftDisplay, Col: 50, Row: 20, Width: 16,
 			Get: func(u *user.User) string { return formatTime(u.UpdatedAt) },
 		},
 		{
-			Label: "Last Login", Type: ftDisplay, Col: 50, Row: 20, Width: 16,
+			Label: "Last Login", Type: ftDisplay, Col: 50, Row: 21, Width: 16,
 			Get: func(u *user.User) string { return formatTime(u.LastLogin) },
 		},
 		{
-			Label: "Bulletin", Type: ftDisplay, Col: 50, Row: 21, Width: 16,
+			Label: "Bulletin", Type: ftDisplay, Col: 50, Row: 22, Width: 16,
 			Get: func(u *user.User) string { return formatTime(u.LastBulletinRead) },
 		},
 	}

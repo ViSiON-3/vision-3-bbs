@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/gliderlabs/ssh"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 )
 
 // Telnet protocol constants
@@ -55,6 +57,11 @@ const (
 // TelnetConn wraps a net.Conn with telnet protocol awareness.
 // Read() strips IAC commands transparently; Write() escapes 0xFF bytes.
 type TelnetConn struct {
+	// owner is the session this connection serves, set once by
+	// NewTelnetSessionAdapter: goroutines the connection starts name it to
+	// safego.Go, which maps it to the caller's node for the log.
+	owner atomic.Pointer[TelnetSessionAdapter]
+
 	conn    net.Conn
 	reader  *bufio.Reader
 	writeMu sync.Mutex // protects writes to conn
@@ -326,16 +333,27 @@ func (tc *TelnetConn) SetReadInterrupt(ch <-chan struct{}) {
 	}
 
 	// Watch for the interrupt and unblock the read when it fires
-	go func(ch <-chan struct{}) {
+	safego.Go(safego.KindTerminal, tc.sessionOwner(), func() {
 		<-ch
 		// Set the deadline under riMu so a wake cannot clear it between its
-		// fired-check and its own SetReadDeadline.
+		// fired-check and its own SetReadDeadline. The unlock is deferred so
+		// a panic here cannot leave riMu held.
 		tc.riMu.Lock()
+		defer tc.riMu.Unlock()
+		safego.TestPoint(safego.KindTerminal)
 		if tc.readInterrupt == ch {
 			_ = tc.conn.SetReadDeadline(time.Now()) // best-effort negotiation deadline
 		}
-		tc.riMu.Unlock()
-	}(ch)
+	}, func() {
+		// Only the deadline wakes a read already blocked on the socket: set
+		// it, as above, once the interrupt has fired, if it is still current.
+		<-ch
+		tc.riMu.Lock()
+		defer tc.riMu.Unlock()
+		if tc.readInterrupt == ch {
+			_ = tc.conn.SetReadDeadline(time.Now()) // best-effort negotiation deadline
+		}
+	})
 }
 
 // ErrWoken is returned by Read when Wake cut a blocked read short. No data
@@ -720,4 +738,13 @@ func (tc *TelnetConn) detectViaCursorPositioning() (width, height int, err error
 	}
 
 	return cols, rows, nil
+}
+
+// sessionOwner is the session tc serves, for safego.Go, or tc itself before
+// it has one.
+func (tc *TelnetConn) sessionOwner() any {
+	if a := tc.owner.Load(); a != nil {
+		return a
+	}
+	return tc
 }

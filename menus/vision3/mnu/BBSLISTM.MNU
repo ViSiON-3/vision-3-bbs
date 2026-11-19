@@ -1,0 +1,16 @@
+{
+    "TITLE": "BBS Listings",
+    "CLR": true,
+    "USEPROMPT": true,
+    "PROMPT1": "|15BBS Listings Directory",
+    "PROMPT2": "|C5[|C4BBS List|C5] |C1Command |C5->|C2 ",
+    "FALLBACK": "",
+    "ACS": "*",
+    "PASS": "",
+    "HELPMENU": "",
+    "FORCEHELPLEVEL": 0,
+    "MES_CONF": 0,
+    "FILE_CONF": 0,
+    "FORCEHOTKEY": false,
+    "SCRIPT": "submenu.js"
+}

@@ -9,6 +9,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
 	"github.com/dop251/goja"
+	"github.com/rivo/uniseg"
 )
 
 // registerUtil creates the v3.util object with common utility functions.
@@ -148,7 +149,60 @@ func registerUtil(v3 *goja.Object, eng *Engine) {
 		return vm.ToValue(ansi.VisibleLength(string(processed)))
 	})
 
+	// fitColumns(str, width) — str cut to at most width terminal columns,
+	// whole characters at a time, and padded with spaces to width. Columns
+	// are counted as the caller's terminal draws them: by grapheme cluster
+	// on UTF-8, one per character on CP437. str is measured as written, so
+	// pipe codes and escape sequences count as text.
+	jsutil.Set(obj, "fitColumns", func(call goja.FunctionCall) goja.Value {
+		if len(call.Arguments) < 2 {
+			return vm.ToValue("")
+		}
+		width := int(call.Arguments[1].ToInteger())
+		checkWidth(vm, "v3.util.fitColumns", width)
+		utf8Out := eng.session != nil && eng.session.OutputMode == ansi.OutputModeUTF8
+		return vm.ToValue(fitColumns(call.Arguments[0].String(), width, utf8Out))
+	})
+
 	jsutil.Set(v3, "util", obj)
+}
+
+// fitColumns cuts s to at most width columns between whole characters and
+// pads it with spaces to width; a width below one gives "". On UTF-8 a character is a grapheme cluster
+// as uniseg measures it; otherwise each rune is a one-column character. Both
+// match how the User Konfig editor measures its fields.
+func fitColumns(s string, width int, utf8Out bool) string {
+	// A width below one, as a script that computes it may pass, fits
+	// nothing.
+	if width < 1 {
+		return ""
+	}
+	var b strings.Builder
+	used := 0
+	if !utf8Out {
+		for _, r := range s {
+			if used+1 > width {
+				break
+			}
+			b.WriteRune(r)
+			used++
+		}
+		return b.String() + strings.Repeat(" ", width-used)
+	}
+	for rest := s; rest != ""; {
+		var cluster string
+		var w int
+		cluster, rest, w, _ = uniseg.FirstGraphemeClusterInString(rest, -1)
+		if used+w > width {
+			break
+		}
+		b.WriteString(cluster)
+		used += w
+	}
+	if used < width {
+		b.WriteString(strings.Repeat(" ", width-used))
+	}
+	return b.String()
 }
 
 // checkWidth throws a limitError when width, given to the v3.util call named

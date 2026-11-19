@@ -15,6 +15,8 @@ import (
 
 	"github.com/creack/pty"
 	"golang.org/x/term"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 )
 
 // dosDropfileName returns the DOS filename for the configured dropfile type.
@@ -349,16 +351,20 @@ func executeDOSDoor(ctx *DoorCtx) error {
 	outputDone := make(chan struct{})
 	var left doorInputCopy // set by the input goroutine, for after inputDone
 	trailer := ctx.takeDoorEnterTrailer()
-	go func() {
+	safego.Go(safego.KindDoorIO, ctx.NodeNumber, func() {
 		defer close(inputDone)
+		defer ctx.endDoorIfPanicking()
+		safego.TestPoint(safego.KindDoorIO)
 		var err error
 		left, err = copyDoorInput(ptmx, ctx.Session, readInterrupt, trailer)
 		if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
 			slog.Warn("error copying session stdin to dosemu PTY", "node", ctx.NodeNumber, "error", err)
 		}
-	}()
-	go func() {
+	}, nil)
+	safego.Go(safego.KindDoorIO, ctx.NodeNumber, func() {
 		defer close(outputDone)
+		defer ctx.endDoorIfPanicking()
+		safego.TestPoint(safego.KindDoorIO)
 		buf := make([]byte, 4096)
 		var accum []byte
 		gated := true
@@ -397,7 +403,7 @@ func executeDOSDoor(ctx *DoorCtx) error {
 				return
 			}
 		}
-	}()
+	}, nil)
 
 	// Wait for dosemu to exit, then cleanly shut down I/O goroutines
 	cmdErr := cmd.Wait()

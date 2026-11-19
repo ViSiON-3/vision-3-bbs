@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -98,8 +99,13 @@ type Model struct {
 	values          map[string]string // Current string values (key -> value)
 	origValues      map[string]string // Values as loaded from disk (for revert)
 	shippedDefaults map[string]string // Factory defaults (for F4 restore)
-	filePath        string            // Path to strings.json
-	dirty           bool              // Whether values have been modified
+	// inherited is, for a theme's strings.json, what the BBS prints for a
+	// key the file leaves out when that is not the shipped default: the
+	// board's configs/strings.json, and the theme's own file under its
+	// overlay. Nil for the board's file.
+	inherited map[string]string
+	filePath  string // Path to strings.json
+	dirty     bool   // Whether values have been modified
 
 	// extra holds the file's entries that are not strings (an older file's
 	// numeric defColorN), kept as they are on save. bases is the
@@ -154,6 +160,24 @@ type Model struct {
 // New creates a new string editor model.
 // shippedDefaults, if non-nil, provides factory default values for F4 restore.
 func New(filePath string, shippedDefaults map[string]string) (Model, error) {
+	return newModel(filePath, shippedDefaults, nil)
+}
+
+// NewForTheme creates a string editor model on a theme's strings.json.
+// A key the file leaves out prints what the theme inherits, the
+// effective value by key in inherited (see InheritedStrings), or the
+// shipped default where inherited has none; F4 restores that, and a save
+// leaves out every value that prints the same. A value holding shipped
+// text is the theme's own: it may be there to put the shipped wording back
+// over the board's.
+func NewForTheme(filePath string, shippedDefaults, inherited map[string]string) (Model, error) {
+	if inherited == nil {
+		inherited = map[string]string{}
+	}
+	return newModel(filePath, shippedDefaults, inherited)
+}
+
+func newModel(filePath string, shippedDefaults, inherited map[string]string) (Model, error) {
 	catalog := StringEntries()
 	values, extra, err := loadStringsFile(filePath)
 	if err != nil {
@@ -161,8 +185,11 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 	}
 	// A key spelt with other capitals sets the same string for the BBS
 	// (encoding/json ignores case), so the editor shows it under its own
-	// key, and a save writes that spelling.
-	for k, v := range values {
+	// key, and a save writes that spelling. Of several other spellings the
+	// one that sorts first wins, as config.ReadStringsLayer picks for a
+	// theme's file.
+	for _, k := range slices.Sorted(maps.Keys(values)) {
+		v := values[k]
 		if canon, ok := config.CanonicalStringKey(k); ok && canon != k {
 			if _, exact := values[canon]; !exact {
 				values[canon] = v
@@ -175,6 +202,9 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 	// save leaves the key out so later wording reaches it, as doctor --fix
 	// does.
 	for k, v := range values {
+		if inherited != nil {
+			break // a theme's shipped wording is its own (NewForTheme)
+		}
 		if _, ok := config.SupersededString(k, v); ok || stringhistory.Shipped(k, v) {
 			delete(values, k)
 		}
@@ -217,6 +247,7 @@ func New(filePath string, shippedDefaults map[string]string) (Model, error) {
 		values:          values,
 		origValues:      origValues,
 		shippedDefaults: shippedDefaults,
+		inherited:       inherited,
 		filePath:        filePath,
 		extra:           extra,
 		bases:           bases,
@@ -623,17 +654,24 @@ func (m Model) updateSearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // defaultFor returns what the BBS prints for key when strings.json leaves it
 // out: the shipped value, or for a string the template doesn't carry, the
-// runtime's compiled-in default. ok is false when there is none at all.
+// runtime's compiled-in default, or for a theme's file what it inherits.
+// ok is false when there is none at all.
 func (m Model) defaultFor(key string) (string, bool) {
 	_, shipped := m.shippedDefaults[key]
 	_, fallback := config.StringFallbacks[key]
 	_, missing := config.StringMissingDefaults[key]
-	return m.effective(key, "", false), shipped || fallback || missing
+	_, inherited := m.inherited[key]
+	return m.effective(key, "", false), shipped || fallback || missing || inherited
 }
 
 // effective is what the BBS prints for key with the given value, as
 // config.EffectiveString works it out, against the editor's defaults.
 func (m Model) effective(key, value string, present bool) string {
+	if !present {
+		if v, ok := m.inherited[key]; ok {
+			return v
+		}
+	}
 	return config.EffectiveStringWith(m.shippedDefaults, key, value, present)
 }
 

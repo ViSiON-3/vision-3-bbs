@@ -99,7 +99,7 @@ it.
 | TUI Label | config.json key | Default | Description |
 |-----------|------------------|---------|--------------|
 | Enable Gate | `enableChallengeGate` | `false` | Master on/off switch for the Challenge Gate. |
-| Gate Art File | `challengeGateFile` | `BOTCHECK.ASC` | ANSI/ASCII art file shown as the challenge prompt, loaded from `menus/v3/ansi/`. If the file is missing or unreadable, a built-in plain-text fallback prompt is shown instead — the gate never blocks a caller because of a missing file. |
+| Gate Art File | `challengeGateFile` | `BOTCHECK.ASC` | ANSI/ASCII art file shown as the challenge prompt, loaded from the board's `prelogin/ansi/`, else the shipped `menus/v3/ansi/`; never from a theme (see [Pre-login screens](configuration/adding-a-theme.md#pre-login-screens)). If the file is missing or unreadable, a built-in plain-text fallback prompt is shown instead — the gate never blocks a caller because of a missing file. |
 | Challenge Key | `challengeGateKey` | `ESC` | The key the caller must press. Use the literal string `ESC` for the Escape key, or a single character (e.g. `*`). |
 | Timeout Secs | `challengeGateTimeoutSeconds` | `20` | Seconds the caller has to complete the challenge before the connection is dropped. |
 | Req Presses | `challengeGateRequiredPresses` | `2` | Number of times the key must be pressed to pass. |
@@ -845,7 +845,7 @@ has flagged. "Shipped" is the value a new install gets from the template;
 | `badUsersPath` | string | `configs/badusers.txt` | `badusers.txt` in the config directory | Handles refused at signup; see [Bad User Names](#bad-user-names) |
 | `wfcEnabled` | bool | — | `true` | Allow the remote WFC sysop console over SSH |
 | `enableChallengeGate` | bool | `false` | `false` | Challenge Gate master switch |
-| `challengeGateFile` | string | `BOTCHECK.ASC` | `BOTCHECK.ASC` | Gate art file in the menu set's `ansi/` |
+| `challengeGateFile` | string | `BOTCHECK.ASC` | `BOTCHECK.ASC` | Gate art file in `prelogin/ansi/`, else the shipped `menus/v3/ansi/` |
 | `challengeGateKey` | string | `ESC` | `ESC` | Key the caller must press (`ESC` or one character) |
 | `challengeGateTimeoutSeconds` | int | `20` | `20` | Seconds to pass the gate |
 | `challengeGateRequiredPresses` | int | `2` | `2` | Presses required |

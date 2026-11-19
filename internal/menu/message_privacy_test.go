@@ -106,8 +106,11 @@ func newPrivacyFixture(t *testing.T) *privacyFixture {
 func writeShippedConfigs(t *testing.T, cfgDir string) {
 	t.Helper()
 	if err := fs.WalkDir(configtemplates.FS, ".", func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
+		if err != nil {
 			return err
+		}
+		if d.IsDir() {
+			return os.MkdirAll(filepath.Join(cfgDir, p), 0o755)
 		}
 		b, err := configtemplates.FS.ReadFile(p)
 		if err != nil {

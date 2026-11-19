@@ -3,9 +3,11 @@
 package menu
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -291,5 +293,101 @@ func TestDoorEndsAtTimeLimit(t *testing.T) {
 				t.Error("the door's child process outlived the time limit")
 			}
 		})
+	}
+}
+
+// Killing a door's group, found while it runs, ends it together with a child
+// it started that holds its output open, so waiting for the door's output
+// does not wait for the child.
+func TestKillDoorGroupEndsChildrenHoldingOutput(t *testing.T) {
+	if _, err := exec.LookPath("pgrep"); err != nil {
+		t.Skip("needs pgrep to see the door's child start")
+	}
+	cmd := exec.Command("/bin/sh", "-c", "sleep 30 & echo started; wait")
+	var out bytes.Buffer
+	cmd.Stdout = &out // not a file: Wait waits for the copy to reach EOF
+	setDoorProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	// Wait for the child to be running in the door's group.
+	deadline := time.Now().Add(5 * time.Second)
+	for exec.Command("pgrep", "-g", strconv.Itoa(cmd.Process.Pid), "sleep").Run() != nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the door's child never started")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	killProcessGroupOf(doorGroupOf(cmd.Process), cmd.Process)
+	done := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait still waiting for the door's child after the group was killed")
+	}
+}
+
+// killProcessGroupOf finds the group by the ID saved at the start, so it ends
+// a child left holding the output even after the leader has been reaped.
+func TestKillProcessGroupOfAfterTheLeaderIsReaped(t *testing.T) {
+	cmd := exec.Command("/bin/sh", "-c", "sleep 30 & exit 0")
+	var out bytes.Buffer
+	cmd.Stdout = &out // not a file: Wait waits for the copy to reach EOF
+	setDoorProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pgid := cmd.Process.Pid
+	done := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(done) }()
+	// Wait reaps the leader at once, then waits on the child's hold on
+	// stdout: the leader is gone, the group is not.
+	deadline := time.Now().Add(5 * time.Second)
+	for syscall.Kill(pgid, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the leader was never reaped")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := syscall.Kill(-pgid, 0); err != nil {
+		t.Fatalf("the group is already gone (%v); the test needs its child", err)
+	}
+	killProcessGroupOf(pgid, cmd.Process)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait still waiting for the reaped leader's child")
+	}
+}
+
+// Hanging up on a door uses the group taken while it ran, so a child it left
+// holding its output is ended even once the door itself has been reaped.
+func TestHangUpDoorProcessAfterTheLeaderIsReaped(t *testing.T) {
+	cmd := exec.Command("/bin/sh", "-c", "sleep 30 & exit 0")
+	var out bytes.Buffer
+	cmd.Stdout = &out // not a file: Wait waits for the copy to reach EOF
+	setDoorProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pgid := doorGroupOf(cmd.Process)
+	if pgid == 0 {
+		t.Fatal("the door leads no group")
+	}
+	done := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(done) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for syscall.Kill(pgid, 0) == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("the leader was never reaped")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	hangUpDoorProcess(cmd.Process, pgid, done, 50*time.Millisecond)
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Wait still waiting for the reaped door's child after the hang-up")
 	}
 }

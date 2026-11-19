@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -68,30 +69,85 @@ func indexesInOrder(s string, parts ...string) bool {
 }
 
 // A fading toast comes in through the ramp, shows in its own colours, goes
-// out through the ramp reversed, and then the screen is restored.
+// out through the ramp reversed, and then the screen is restored. The step
+// is well above any host's timer resolution, so the real clock cannot cost
+// a frame; TestToastFadeSurvivesCoarseTimers covers the shortest step.
 func TestToastFadesInAndOut(t *testing.T) {
-	env, log := fadeEnv(t, true, 20*time.Millisecond)
-	toastDwell = 600 * time.Millisecond
+	env, log := fadeEnv(t, true, 50*time.Millisecond)
+	toastDwell = time.Second
 	keys := env.readKey()
 	env.sess.AddPage("Hello there")
+	waitFadeRestored(t, env, log)
+	assertFadeFrames(t, env, log)
+	select {
+	case k := <-keys:
+		t.Fatalf("read returned %d with no key pressed", k)
+	default:
+	}
+}
 
+// windowsTick is the default Windows timer and clock resolution.
+const windowsTick = 15625 * time.Microsecond
+
+// coarseTimers gives the toast a virtual clock that moves in windowsTick
+// steps, as Windows' timer and clock do: a wait ends on the first tick at
+// or after its due time, and writes take no time. It does not read the
+// host's clock, so the host's load cannot change the outcome.
+func coarseTimers(t *testing.T) {
+	t.Helper()
+	var mu sync.Mutex
+	now := time.Now().Truncate(windowsTick)
+	toastNow = func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		return now
+	}
+	toastWait = func(_ *editor.InputHandler, d time.Duration) editor.WaitOutcome {
+		mu.Lock()
+		defer mu.Unlock()
+		due := now.Add(d)
+		if now = due.Truncate(windowsTick); now.Before(due) {
+			now = now.Add(windowsTick)
+		}
+		return editor.WaitElapsed
+	}
+	t.Cleanup(func() { toastWait, toastNow = (*editor.InputHandler).WaitFor, time.Now })
+}
+
+// With every wait running late, as on Windows' 15.6ms timer, the fade at
+// its shortest step still draws every frame in and out before the deadline.
+func TestToastFadeSurvivesCoarseTimers(t *testing.T) {
+	coarseTimers(t) // first, so its cleanup runs after the env has stopped reading
+	env, log := fadeEnv(t, true, 20*time.Millisecond)
+	toastDwell = 600 * time.Millisecond
+	env.readKey()
+	env.sess.AddPage("Hello there")
+	waitFadeRestored(t, env, log)
+	assertFadeFrames(t, env, log)
+}
+
+// waitFadeRestored waits for the row under the toast to be written back.
+// The screen was drawn before log was attached, so the only BOTTOM TEXT in
+// log is the restore.
+func waitFadeRestored(t *testing.T, env *toastEnv, log *wireLog) {
+	t.Helper()
 	toastWaitFor(t, "the screen restored", func() bool {
-		return strings.Contains(log.String(), fadeFrame(8, ">> Hello there")) &&
-			strings.Count(log.String(), fadeFrame(8, ">> Hello there")) == 2 &&
-			strings.Contains(env.term.Row(24), "BOTTOM TEXT")
+		return strings.Contains(log.String(), "BOTTOM TEXT") && strings.Contains(env.term.Row(24), "BOTTOM TEXT")
 	})
+}
+
+// assertFadeFrames checks that log holds the fade in, the toast in its own
+// colours, and the fade out, in that order, before the restore.
+func assertFadeFrames(t *testing.T, env *toastEnv, log *wireLog) {
+	t.Helper()
 	text := ">> Hello there"
 	full := string(ansi.ReplacePipeCodes([]byte(env.e.toastText(toast.Toast{Text: "Hello there"}))))
 	if !indexesInOrder(log.String(),
 		fadeFrame(8, text), fadeFrame(7, text), fadeFrame(15, text),
 		full,
-		fadeFrame(15, text), fadeFrame(7, text), fadeFrame(8, text)) {
-		t.Errorf("frames out of order:\n%q", log.String())
-	}
-	select {
-	case k := <-keys:
-		t.Fatalf("read returned %d with no key pressed", k)
-	default:
+		fadeFrame(15, text), fadeFrame(7, text), fadeFrame(8, text),
+		"BOTTOM TEXT") {
+		t.Errorf("frames missing or out of order:\n%q", log.String())
 	}
 }
 
@@ -174,15 +230,22 @@ func TestToastFadeStopsOnInterrupt(t *testing.T) {
 	}
 }
 
-// slowWriter delays every write, as a slow link does.
+// slowWriter delays every write, as a slow link does, and records the
+// longest write, which on a coarse timer runs past delay.
 type slowWriter struct {
 	*wireLog
-	delay time.Duration
+	delay   time.Duration
+	longest *atomic.Int64
 }
 
 func (s slowWriter) Write(p []byte) (int, error) {
+	began := time.Now()
 	time.Sleep(s.delay)
-	return s.wireLog.Write(p)
+	n, err := s.wireLog.Write(p)
+	if took := int64(time.Since(began)); took > s.longest.Load() {
+		s.longest.Store(took)
+	}
+	return n, err
 }
 
 // Slow output does not stretch a fading toast past its dwell: the frames
@@ -191,17 +254,29 @@ func (s slowWriter) Write(p []byte) (int, error) {
 func TestToastFadeKeepsToDeadline(t *testing.T) {
 	env, log := fadeEnv(t, true, 50*time.Millisecond)
 	toastDwell = 600 * time.Millisecond
-	SetSessionOutput(env.s, slowWriter{wireLog: log, delay: 80 * time.Millisecond})
+	sw := slowWriter{wireLog: log, delay: 150 * time.Millisecond, longest: new(atomic.Int64)}
+	SetSessionOutput(env.s, sw)
 	env.readKey()
 	start := time.Now()
 	env.sess.AddPage("Hello there")
 	toastWaitFor(t, "the toast drawn", func() bool { return strings.Contains(log.String(), "Hello there") })
 	toastWaitFor(t, "the screen restored", func() bool { return strings.Contains(env.term.Row(24), "BOTTOM TEXT") })
-	// Six frames and a hold at 80ms a write would run well over a second
-	// without the deadline; with it, the dwell, the write in flight when it
-	// passes, and the restore.
-	if took := time.Since(start); took > 600*time.Millisecond+2*80*time.Millisecond+60*time.Millisecond {
-		t.Errorf("toast took %s against a 600ms dwell", took)
+	took := time.Since(start)
+	// The fade in and the toast's own frame use up the dwell. Without the
+	// deadline the three fade-out frames would still be drawn, about 1.25s
+	// in all; with it, the dwell, the write in flight when it passes, and
+	// the restore, with each write as long as the longest one really took
+	// and 100ms for the wake-up, the poll and a coarse clock.
+	write := time.Duration(sw.longest.Load())
+	if limit := 600*time.Millisecond + 2*write + 100*time.Millisecond; took > limit {
+		t.Errorf("toast took %s against a 600ms dwell (limit %s, longest write %s)", took, limit, write)
+	}
+	// The toast's own frame ends past the deadline, so no fade-out frame
+	// may follow it: each colour shows once, in the fade in, at most.
+	for _, c := range []int{8, 7, 15} {
+		if n := strings.Count(log.String(), fadeFrame(c, ">> Hello there")); n > 1 {
+			t.Errorf("colour %d drawn %d times: a fade-out frame started past the deadline:\n%q", c, n, log.String())
+		}
 	}
 }
 
@@ -218,15 +293,17 @@ func (c *countingSlowWriter) Write(p []byte) (int, error) {
 }
 
 // A frame write that crosses the deadline ends the fade at once: no wait
-// after it, and no further frame.
+// after it, and no further frame. It ends as elapsed even with an
+// interruption waiting, since the deadline passed first.
 func TestFadeToastStopsWhenAWriteCrossesTheDeadline(t *testing.T) {
 	env, _ := fadeEnv(t, true, 80*time.Millisecond)
 	ih := getSessionIH(env.s)
 	w := &countingSlowWriter{delay: 150 * time.Millisecond}
 	lay := toastDraw{row: 24, col: 1, line: "Hello", mode: ansi.OutputModeUTF8}
+	ih.Interrupt()
 
 	start := time.Now()
-	out := fadeToast(ih, lay, w, []int{8, 7, 15}, 80*time.Millisecond, false, start.Add(100*time.Millisecond))
+	out := fadeToast(ih, lay, w, []int{8, 7, 15}, 80*time.Millisecond, false, start, start.Add(100*time.Millisecond))
 	took := time.Since(start)
 	if out != editor.WaitElapsed {
 		t.Errorf("ended %v, want elapsed", out)

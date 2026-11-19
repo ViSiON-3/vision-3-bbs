@@ -1,0 +1,14 @@
+{
+  "server": "news.phreaknet.org:563",
+  "tls": true,
+  "max_articles_per_sync": 25,
+  "initial_articles": 25,
+  "timeout_seconds": 20,
+  "max_run_seconds": 180,
+  "max_article_bytes": 262144,
+  "groups": [
+    {"name": "comp.sys.amiga.misc", "area_tag": "NNTP_AMIGA", "enabled": false},
+    {"name": "comp.sys.cbm", "area_tag": "NNTP_CBM", "enabled": false},
+    {"name": "alt.bbs", "area_tag": "NNTP_BBS", "enabled": false}
+  ]
+}

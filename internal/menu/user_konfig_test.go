@@ -144,7 +144,8 @@ func TestKonfigMorePromptsWithoutDevices(t *testing.T) {
 
 // The sections are laid out as #1099 sets them: Terminal, Appearance and
 // Files on the left, Messages and Personal on the right, each item in its
-// own section, with a blank row between sections.
+// own section, with a blank row between sections. Sixel Graphics took Hot
+// Keys' row in Terminal, and Hot Keys moved to the end of Personal.
 func TestKonfigSectionLayout(t *testing.T) {
 	str := konfigTestExecutor(t).Strings()
 	cols := konfigSections(str)
@@ -152,8 +153,8 @@ func TestKonfigSectionLayout(t *testing.T) {
 		title string
 		keys  string
 	}{
-		{{str.KonfigSectionTerminal, "ABCD"}, {str.KonfigSectionAppearance, "VUT"}, {str.KonfigSectionFiles, "KLS"}},
-		{{str.KonfigSectionMessages, "EFMNP"}, {str.KonfigSectionPersonal, "GHIJOR"}},
+		{{str.KonfigSectionTerminal, "ABCW"}, {str.KonfigSectionAppearance, "VUT"}, {str.KonfigSectionFiles, "KLS"}},
+		{{str.KonfigSectionMessages, "EFMNP"}, {str.KonfigSectionPersonal, "GHIJORD"}},
 	}
 	for c := range cols {
 		if len(cols[c]) != len(want[c]) {
@@ -286,10 +287,10 @@ func TestKonfigHotkeyTogglesAndSaves(t *testing.T) {
 
 func TestKonfigArrowsAndEnterActivateHighlightedItem(t *testing.T) {
 	um, u := newUserConfigTestUser(t)
-	// Down three times from Screen Width lands on Hot Keys.
+	// Down three times from Screen Width lands on Sixel Graphics.
 	_, got, _ := runKonfig(t, um, u, keyDown+keyDown+keyDown+"\rq", "")
-	if !got.HotKeys {
-		t.Fatal("Enter on the highlighted Hot Keys row did not switch it")
+	if got.PreferredSixel != user.SixelOff {
+		t.Fatalf("Enter on the highlighted Sixel Graphics row set %q, want %q", got.PreferredSixel, user.SixelOff)
 	}
 }
 

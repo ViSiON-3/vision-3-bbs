@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net"
 	"os"
 	"os/signal"
@@ -30,6 +31,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/ftn"
+	"github.com/ViSiON-3/vision-3-bbs/internal/geoip"
 	"github.com/ViSiON-3/vision-3-bbs/internal/logging"
 	"github.com/ViSiON-3/vision-3-bbs/internal/mailer"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menu"
@@ -37,6 +39,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwkapi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/qwkservice"
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/scheduler"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
@@ -70,6 +73,7 @@ var (
 	outputModeFlag    string             // Output mode flag (auto, utf8, cp437)
 	connectionTracker *ConnectionTracker // Global connection tracker
 	v3netService      *v3net.Service     // V3Net networking service (nil if disabled)
+	placeDB           *geoip.DB          // Labels call records with where the caller is; nil if geoipPath is unset
 )
 
 // allocateNodeIDForSession assigns the lowest available node slot (1..maxNodes)
@@ -625,11 +629,12 @@ func (ct *ConnectionTracker) RecordFailedLoginAttempt(ip string) bool {
 			"attempts", tracker.Attempts,
 			"locked_until", tracker.LockedUntil.Format(time.RFC3339))
 		// Persist to blocklist file outside the lock to avoid deadlock
-		go func() {
+		safego.Go(safego.KindBlocklist, nil, func() {
+			safego.TestPoint(safego.KindBlocklist)
 			if err := ct.AppendToBlocklist(ip); err != nil {
 				slog.Error("failed to persist blocked IP to blocklist", "ip", ip, "error", err)
 			}
-		}()
+		}, nil)
 		return true
 	}
 
@@ -936,7 +941,9 @@ func (ct *ConnectionTracker) StopWatching() {
 
 // --- BBS sessionHandler (Original logic) ---
 func sessionHandler(s ssh.Session) {
-	nodeID := allocateNodeIDForSession(s)
+	var nodeID int32
+	defer recoverSession(s, &nodeID) // first deferred, so it runs last
+	nodeID = allocateNodeIDForSession(s)
 	tap := snoop.NewTap()
 	defer tap.Close()
 	if ts, ok := s.(interface{ SetTap(*snoop.Tap) }); ok {
@@ -976,15 +983,21 @@ func sessionHandler(s ssh.Session) {
 			adminServer.ClearPage(int(nodeID), authenticatedUser.Handle, "logoff")
 		}
 
+		// The announcements are guarded so a panic in either still lets
+		// the caller be marked offline and the call be recorded below.
 		if logonAnnounced {
-			menuExecutor.AnnounceLogoff(bbsSession, authenticatedUser)
+			guardCleanup("logoff announcement", nodeID, func() {
+				menuExecutor.AnnounceLogoff(bbsSession, authenticatedUser)
+			})
 		}
 		// V3Net Central: the caller's session has ended. Only a session
 		// whose logon completed is announced (the same test as the local
 		// logoff toast), and only to a caller who shares logoffs; a board
 		// losing its hub never announces any.
 		if logonAnnounced && bbsSession != nil && authenticatedUser != nil {
-			menuExecutor.SendCentralLogoffAlert(userMgr, bbsSession, authenticatedUser)
+			guardCleanup("V3Net logoff alert", nodeID, func() {
+				menuExecutor.SendCentralLogoffAlert(userMgr, bbsSession, authenticatedUser)
+			})
 		}
 
 		// --- Record Call History ---
@@ -1008,13 +1021,9 @@ func sessionHandler(s ssh.Session) {
 				DownloadedMB:   0.0,
 				Actions:        "",
 				BaudRate:       "38400",
+				From:           placeDB.Label(extractIP(s.RemoteAddr())),
 			}
-			if bbsSession != nil {
-				bbsSession.Mutex.RLock()
-				callRec.Invisible = bbsSession.Invisible
-				bbsSession.Mutex.RUnlock()
-			}
-			userMgr.AddCallRecord(callRec)
+			recordCall(userMgr, bbsSession, callRec, slog.Default())
 		} else {
 			slog.Debug("no authenticated user, skipping call record", "node", nodeID)
 		}
@@ -1027,6 +1036,7 @@ func sessionHandler(s ssh.Session) {
 		// ------------------------
 		_ = s.Close() // ensure the session is closed; best-effort
 	}(capturedStartTime) // Pass only the startTime value
+	sessionSetUp(s, nodeID)
 
 	// Create the session state object *early* - COMMENTED OUT (not used, type mismatch)
 	// sessionState := &session.BbsSession{
@@ -1057,77 +1067,18 @@ func sessionHandler(s ssh.Session) {
 		slog.Info("no PTY request", "node", nodeID)
 	}
 
-	// --- Determine Output Mode ---
-	effectiveMode := ansi.OutputModeAuto // Start with Auto as the base
-	switch outputModeFlag {              // Check the global flag first
-	case "utf8":
-		effectiveMode = ansi.OutputModeUTF8
-		slog.Info("output mode forced to UTF-8 by flag", "node", nodeID)
-	case "cp437":
-		effectiveMode = ansi.OutputModeCP437
-		slog.Info("output mode forced to CP437 by flag", "node", nodeID)
-	case "auto":
-		// Auto mode: Use PTY info if available
-		if isPty {
-			termType := strings.ToLower(ptyReq.Term)
-			termCols := int(termWidth.Load())
-			slog.Info("auto mode detecting output based on TERM", "node", nodeID, "term", termType, "cols", termCols)
-
-			// Detect retro BBS terminal clients using terminal capabilities
-			isRetroTerminal := false
-
-			// NetRunner: reports "ansi-256color-rgb" directly, or "xterm" with >80 cols
-			// (the xterm heuristic is an SSH-path fallback for older NetRunner builds
-			// that self-identify as xterm; telnet clients now use TERM_TYPE negotiation
-			// and will report their actual type, so this heuristic is SSH-specific)
-			_, isTelnet := s.(*telnetserver.TelnetSessionAdapter)
-			if termType == "ansi-256color-rgb" || (!isTelnet && termType == "xterm" && termCols > 80) {
-				slog.Info("detected NetRunner", "node", nodeID, "term", termType, "cols", termCols)
-				isRetroTerminal = true
-			}
-
-			// SyncTerm: Reports syncterm or sync
-			if termType == "syncterm" || termType == "sync" {
-				slog.Info("detected SyncTerm", "node", nodeID, "term", termType)
-				isRetroTerminal = true
-			}
-
-			// Magiterm: Reports magiterm
-			if termType == "magiterm" {
-				slog.Info("detected Magiterm", "node", nodeID, "term", termType)
-				isRetroTerminal = true
-			}
-
-			// Other known CP437 terminal types
-			if termType == "ansi" || termType == "scoansi" || termType == "ansi-bbs" ||
-				termType == "netrunner" || strings.HasPrefix(termType, "vt100") {
-				slog.Info("detected CP437 terminal type", "node", nodeID, "term", termType)
-				isRetroTerminal = true
-			}
-
-			if isRetroTerminal {
-				slog.Info("auto mode selecting CP437 for retro BBS terminal", "node", nodeID)
-				effectiveMode = ansi.OutputModeCP437
-			} else {
-				slog.Info("auto mode selecting UTF-8 for modern terminal", "node", nodeID, "term", termType)
-				effectiveMode = ansi.OutputModeUTF8
-			}
-
-			// The terminal type is a guess at the encoding; ask the terminal.
-			probed := menu.ProbeSessionEncoding(s, encodingProbeTimeout)
-			if probed == ansi.OutputModeAuto {
-				slog.Info("encoding probe got no answer, keeping terminal type guess", "node", nodeID)
-			} else if probed != effectiveMode {
-				slog.Info("encoding probe overrides terminal type guess", "node", nodeID, "term", termType, "utf8", probed == ansi.OutputModeUTF8)
-			}
-			effectiveMode = connectEncoding(effectiveMode, probed)
-		} else {
-			// No PTY, safer to default to UTF-8? Or CP437?
-			// Let's default to UTF-8 for non-PTY as it's more common for raw streams.
-			slog.Info("auto mode selecting UTF-8, no PTY requested", "node", nodeID)
-			effectiveMode = ansi.OutputModeUTF8
-		}
+	// --- Ask the terminal what it can do ---
+	// The encoding probe goes only when the encoding is left to detection;
+	// the device attributes queries, which decide sixel, go to every
+	// terminal. Neither looks at the terminal's announced type.
+	probed := ansi.OutputModeAuto
+	if isPty {
+		probed = menu.ProbeTerminal(s, encodingProbeTimeout, probeEncoding(outputModeFlag), slog.Default().With("node", nodeID, "remote", s.RemoteAddr().String()))
 	}
+
+	// --- Determine Output Mode ---
+	effectiveMode := connectEncoding(outputModeFlag, isPty, probed)
+	slog.Info("output mode at connect", "node", nodeID, "flag", outputModeFlag, "pty", isPty, "utf8", effectiveMode == ansi.OutputModeUTF8)
 
 	// Record the output mode for this session so extended (byte >= 128)
 	// keystrokes are decoded the same way output is encoded: CP437 bytes
@@ -1204,80 +1155,32 @@ func sessionHandler(s ssh.Session) {
 	if isPty && winCh != nil {
 		hub, resizes := winch.Own(s, winCh)
 		defer hub.Close()
-		go func() {
-			type transferChecker interface{ IsTransferActive() bool }
-			var pendingResize atomic.Bool
-			var pendingW, pendingH atomic.Int32
-			// When a resize is suppressed during a transfer, spin up a
-			// short-lived goroutine that polls for transfer completion and
-			// replays the suppressed resize so the terminal doesn't stay at
-			// the wrong dimensions for the rest of the session.
-			var replayOnce sync.Once
-			var replayDone atomic.Bool
-			spawnReplayWaiter := func() {
-				tc, ok := s.(transferChecker)
-				if !ok {
-					return
-				}
-				replayOnce.Do(func() {
-					go func() {
-						ticker := time.NewTicker(250 * time.Millisecond)
-						defer ticker.Stop()
-						for range ticker.C {
-							if !tc.IsTransferActive() {
-								if pendingResize.Load() {
-									w := int(pendingW.Load())
-									h := int(pendingH.Load())
-									slog.Debug("replaying pending resize after transfer ended", "node", nodeID, "width", w, "height", h)
-									_ = terminal.SetSize(w, h)
-									pendingResize.Store(false)
-								}
-								replayDone.Store(true)
-								return
-							}
-						}
-					}()
-				})
-			}
-			for win := range resizes {
-				slog.Debug("window resize event", "node", nodeID, "width", win.Width, "height", win.Height)
+		rw := &resizeWatcher{
+			node: nodeID,
+			setSize: func(w, h int) {
+				_ = terminal.SetSize(w, h) // best-effort repaint
+			},
+			onSize: func(win ssh.Window) {
+				// An SSH window size is 32 bits unsigned: clamp it, rather
+				// than let it wrap, into the int32 these hold.
 				if win.Width > 0 {
-					termWidth.Store(int32(win.Width))
-					physicalWidth.Store(int32(win.Width))
+					w := int32(min(win.Width, math.MaxInt32))
+					termWidth.Store(w)
+					physicalWidth.Store(w)
 				}
 				if win.Height > 0 {
-					termHeight.Store(int32(win.Height))
+					termHeight.Store(int32(min(win.Height, math.MaxInt32)))
 				}
-				if win.Width > 0 && win.Height > 0 {
-					// Skip terminal repaint during binary transfers — SetSize
-					// writes ANSI sequences via session.Write() which does CRLF
-					// conversion, corrupting the RawWrite binary data stream.
-					if tc, ok := s.(transferChecker); ok && tc.IsTransferActive() {
-						slog.Debug("suppressed terminal.SetSize during active transfer", "node", nodeID)
-						pendingResize.Store(true)
-						pendingW.Store(int32(win.Width))
-						pendingH.Store(int32(win.Height))
-						spawnReplayWaiter()
-					} else {
-						// Replay any suppressed resize now that the transfer is done.
-						if pendingResize.Load() {
-							w := int(pendingW.Load())
-							h := int(pendingH.Load())
-							slog.Debug("replaying pending resize after transfer ended", "node", nodeID, "width", w, "height", h)
-							pendingResize.Store(false)
-							_ = terminal.SetSize(w, h)
-						}
-						// Reset the one-shot replay waiter for the next transfer.
-						if replayDone.Load() {
-							replayOnce = sync.Once{}
-							replayDone.Store(false)
-						}
-						_ = terminal.SetSize(win.Width, win.Height)
-					}
-				}
-			}
-			slog.Debug("window change channel closed", "node", nodeID)
-		}()
+			},
+			replayPoll: 250 * time.Millisecond,
+		}
+		if tc, ok := s.(interface{ IsTransferActive() bool }); ok {
+			rw.transferActive = tc.IsTransferActive
+		}
+		safego.Go(safego.KindResize, int(nodeID), func() {
+			safego.TestPoint(safego.KindResize)
+			rw.run(resizes)
+		}, nil)
 	}
 
 	// Attempt to set raw mode (might fail, proceed anyway)
@@ -1351,9 +1254,7 @@ func sessionHandler(s ssh.Session) {
 			return
 		}
 		authenticatedUser = authedUser
-		bbsSession.Mutex.Lock()
-		bbsSession.User = authenticatedUser
-		bbsSession.Mutex.Unlock()
+		setSessionUser(bbsSession, authenticatedUser, int(nodeID), slog.Default())
 
 		// Mark user as online
 		userMgr.MarkUserOnline(authenticatedUser.ID)
@@ -1391,9 +1292,7 @@ func sessionHandler(s ssh.Session) {
 		// sequence — runs exactly as for any other caller.
 		if matrixUser != nil {
 			authenticatedUser = matrixUser
-			bbsSession.Mutex.Lock()
-			bbsSession.User = authenticatedUser
-			bbsSession.Mutex.Unlock()
+			setSessionUser(bbsSession, authenticatedUser, int(nodeID), slog.Default())
 			userMgr.MarkUserOnline(authenticatedUser.ID)
 			slog.Info("continuing as newly created user", "node", nodeID, "user", authenticatedUser.Handle)
 		}
@@ -1404,7 +1303,7 @@ func sessionHandler(s ssh.Session) {
 	for authenticatedUser == nil {
 		if currentMenuName == "" || currentMenuName == "LOGOFF" {
 			slog.Info("login failed or aborted", "node", nodeID)
-			msg := loadedStrings.ExecLoginCancelled
+			msg := menuExecutor.Strings().ExecLoginCancelled
 			if msg == "" {
 				msg = "\r\n|01Login cancelled.|07\r\n"
 			}
@@ -1431,9 +1330,7 @@ func sessionHandler(s ssh.Session) {
 		// Check if authentication was successful during this menu execution
 		if authUser != nil {
 			authenticatedUser = authUser
-			bbsSession.Mutex.Lock()
-			bbsSession.User = authenticatedUser
-			bbsSession.Mutex.Unlock()
+			setSessionUser(bbsSession, authenticatedUser, int(nodeID), slog.Default())
 			slog.Info("user authenticated", "node", nodeID, "user", authenticatedUser.Handle)
 
 			// Mark user as online
@@ -1521,14 +1418,9 @@ func sessionHandler(s ssh.Session) {
 	slog.Info("entering main loop", "node", nodeID, "user", authenticatedUser.Handle)
 
 	// --- Invisible Login Prompt (users at or above invisibleLevel) ---
-	cfg := menuExecutor.GetServerConfig()
-	invLevel := cfg.InvisibleLevel
-	if invLevel == 0 {
-		invLevel = cfg.CoSysOpLevel // backward compat: missing config uses coSysOpLevel
-	}
-	if authenticatedUser.AccessLevel >= invLevel {
+	if offersInvisibleLogon(authenticatedUser, menuExecutor.GetServerConfig()) {
 		_, _ = terminal.Write([]byte("\x1b[2J\x1b[H")) // best-effort display
-		invisPrompt := loadedStrings.InvisibleLogonPrompt
+		invisPrompt := sessExec.Strings().InvisibleLogonPrompt
 		if invisPrompt == "" {
 			invisPrompt = " |03Invisible Logon?|07"
 		}
@@ -1581,7 +1473,7 @@ func sessionHandler(s ssh.Session) {
 
 			useNew, promptErr := sessExec.PromptYesNof(s, terminal,
 				effectiveMode, int(nodeID), detectedW, detectedH, false,
-				loadedStrings.TermSizeNewDetectedPrompt,
+				sessExec.Strings().TermSizeNewDetectedPrompt,
 				detectedW, detectedH, authenticatedUser.ScreenWidth, authenticatedUser.ScreenHeight)
 			if promptErr != nil {
 				if errors.Is(promptErr, io.EOF) {
@@ -1598,7 +1490,7 @@ func sessionHandler(s ssh.Session) {
 				termHeight.Store(int32(detectedH))
 
 				saveDefault, saveErr := sessExec.PromptYesNoString(s, terminal,
-					loadedStrings.TermSizeUpdateDefaultsPrompt,
+					sessExec.Strings().TermSizeUpdateDefaultsPrompt,
 					effectiveMode, int(nodeID), detectedW, detectedH, true)
 				if saveErr != nil && errors.Is(saveErr, io.EOF) {
 					slog.Info("user disconnected during save-defaults prompt", "node", nodeID)
@@ -1866,6 +1758,8 @@ func main() {
 	flag.BoolVar(&doctorJSON, "json", false, "Write doctor output as JSON")
 	flag.BoolVar(&doctorFix, "fix", false, "Apply safe doctor repairs (requires --doctor)")
 	flag.BoolVar(&doctorDryRun, "dry-run", false, "Preview safe doctor repairs without applying them (requires --fix)")
+	var doctorTheme string
+	flag.StringVar(&doctorTheme, "theme", "", "Check one theme, a name under menus/ or a directory, and list what the shipped theme has that it lacks (requires --doctor)")
 	var convertChatNfo string
 	flag.StringVar(&convertChatNfo, "convert-chatnfo", "", "Convert a Vision/2 CHATNFO.n chat layout to chat screen JSON on stdout and exit")
 	flag.Parse()
@@ -1874,6 +1768,10 @@ func main() {
 	}
 	if (doctorFix || doctorDryRun) && !doctorMode {
 		fmt.Fprintln(os.Stderr, "vision3: --fix and --dry-run require --doctor")
+		os.Exit(2)
+	}
+	if doctorTheme != "" && (!doctorMode || doctorFix) {
+		fmt.Fprintln(os.Stderr, "vision3: --theme requires --doctor, without --fix")
 		os.Exit(2)
 	}
 	if doctorDryRun && !doctorFix {
@@ -1885,6 +1783,9 @@ func main() {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "vision3 doctor: cannot determine board directory: %v\n", err)
 			os.Exit(2)
+		}
+		if doctorTheme != "" {
+			os.Exit(runThemeDoctor(basePath, doctorTheme, doctorJSON, os.Stdout, os.Stderr))
 		}
 		os.Exit(runDoctor(basePath, doctorJSON, doctorFix, doctorDryRun, os.Stdout, os.Stderr))
 	}
@@ -2036,6 +1937,12 @@ func main() {
 	userMgr.SetNewUserLevel(serverConfig.NewUserLevel)
 	// LoadServerConfig has already resolved the NUV conflict if both were set.
 	userMgr.SetAutoValidateNewUsers(serverConfig.AutoValidateNewUsers)
+
+	if serverConfig.GeoIPPath != "" {
+		if placeDB, err = geoip.Open(serverConfig.GeoIPPath); err != nil {
+			slog.Warn("geoip database not loaded; call log From stays blank", "path", serverConfig.GeoIPPath, "error", err)
+		}
+	}
 
 	// Initialize MessageManager (areas config from configs/, message data from data/)
 	messageMgr, err = message.NewMessageManager(dataPath, rootConfigPath, serverConfig.BoardName, networkOrigins)

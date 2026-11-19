@@ -16,9 +16,10 @@ import (
 )
 
 // FS holds every *.json template in this directory, keyed by bare file name
-// (for example "strings.json"). Non-JSON templates are not included.
+// (for example "strings.json"), and the shipped source definitions as
+// "sources/<name>.json". Non-JSON templates are not included.
 //
-//go:embed *.json
+//go:embed *.json sources/*.json
 var FS embed.FS
 
 // StringDefaults returns the factory values for strings.json. The template

@@ -40,6 +40,81 @@ func TestDoorWatchIdle(t *testing.T) {
 	}
 }
 
+// A menu script run again after a notice carries on the idle countdown of
+// the run before it, so a stream of toasts cannot keep an idle caller on.
+func TestDoorWatchContinueIdle(t *testing.T) {
+	t.Run("counts from the earlier start", func(t *testing.T) {
+		w := newDoorWatch(time.Hour, time.Time{})
+		defer w.freeze()
+		from := time.Now().Add(-time.Hour + 300*time.Millisecond)
+		w.continueIdle(from)
+		if got := w.idleSince(); !got.Equal(from) {
+			t.Errorf("idleSince = %v, want %v", got, from)
+		}
+		select {
+		case <-w.Ended():
+		case <-time.After(screenWait):
+			t.Fatal("watch did not end at the carried-on idle timeout")
+		}
+		if over := from.Add(time.Hour); time.Now().Before(over) {
+			t.Errorf("watch ended %v before the carried-on deadline", time.Until(over))
+		}
+		if r := w.endReason(); r != doorEndIdle {
+			t.Errorf("reason = %v, want idle", r)
+		}
+	})
+	t.Run("already over ends the door at once", func(t *testing.T) {
+		w := newDoorWatch(time.Hour, time.Time{})
+		defer w.freeze()
+		w.continueIdle(time.Now().Add(-2 * time.Hour))
+		select {
+		case <-w.Ended():
+		case <-time.After(screenWait):
+			t.Fatal("watch did not end")
+		}
+	})
+	t.Run("zero time and input count from now", func(t *testing.T) {
+		w := newDoorWatch(time.Hour, time.Time{})
+		defer w.freeze()
+		start := w.idleSince()
+		w.continueIdle(time.Time{})
+		if got := w.idleSince(); !got.Equal(start) {
+			t.Errorf("idleSince moved to %v for a zero time", got)
+		}
+		w.continueIdle(time.Now().Add(-time.Minute))
+		before := time.Now()
+		w.touch()
+		after := time.Now()
+		if got := w.idleSince(); got.Before(before) || got.After(after) {
+			t.Errorf("idleSince = %v after input, want between %v and %v", got, before, after)
+		}
+		select {
+		case <-w.Ended():
+			t.Fatal("watch ended")
+		default:
+		}
+	})
+}
+
+// An idle callback that started before input reset the countdown, and got
+// the lock after it, does not end the door.
+func TestDoorWatchIdleCallbackSeesLateInput(t *testing.T) {
+	w := newDoorWatch(time.Hour, time.Time{})
+	defer w.freeze()
+	w.touch()
+	w.idleExpired()
+	if r := w.endReason(); r != 0 {
+		t.Fatalf("ended for %v after input", r)
+	}
+	w.mu.Lock()
+	w.idleFrom = time.Now().Add(-2 * time.Hour)
+	w.mu.Unlock()
+	w.idleExpired()
+	if r := w.endReason(); r != doorEndIdle {
+		t.Errorf("reason = %v, want idle once the countdown is over", r)
+	}
+}
+
 func TestDoorWatchNil(t *testing.T) {
 	var w *doorWatch
 	w.freeze()
@@ -269,6 +344,23 @@ func TestRunDoorWatchedRefusesExhaustedTime(t *testing.T) {
 	err := runDoorWatched(ctx, func(*DoorCtx) error { ran = true; return nil })
 	if !errors.Is(err, editor.ErrTimeLimit) || ran {
 		t.Errorf("err=%v ran=%v, want editor.ErrTimeLimit without running the door", err, ran)
+	}
+}
+
+// A countdown carried on from an earlier run that is already over ends the
+// call before the door starts; a caller exempt from the idle timeout is let in.
+func TestRunDoorWatchedRefusesExhaustedIdle(t *testing.T) {
+	ctx := &DoorCtx{SessionStartTime: time.Now(), IdleTimeout: time.Minute, IdleFrom: time.Now().Add(-2 * time.Minute)}
+	ran := false
+	err := runDoorWatched(ctx, func(*DoorCtx) error { ran = true; return nil })
+	if !errors.Is(err, editor.ErrIdleTimeout) || ran {
+		t.Errorf("err=%v ran=%v, want editor.ErrIdleTimeout without running the door", err, ran)
+	}
+
+	exempt := &DoorCtx{SessionStartTime: time.Now(), IdleFrom: time.Now().Add(-2 * time.Minute)}
+	exemptRan := false
+	if err := runDoorWatched(exempt, func(*DoorCtx) error { exemptRan = true; return nil }); err != nil || !exemptRan {
+		t.Errorf("exempt caller: err=%v ran=%v, want the door run", err, exemptRan)
 	}
 }
 

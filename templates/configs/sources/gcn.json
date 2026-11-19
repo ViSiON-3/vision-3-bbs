@@ -1,0 +1,36 @@
+{
+  "name": "gcn",
+  "description": "NASA GCN public astronomical Circulars: observing-team detections, follow-ups and corrections",
+  "fetch": "http",
+  "threads": true,
+  "page_delay_seconds": 1,
+  "listing_url": "https://gcn.nasa.gov/{feed}",
+  "target_pattern": "^circulars$",
+  "page_origin": "https://gcn.nasa.gov",
+  "content": "main",
+  "listing": {
+    "item": "ol > li[value]:has(a[href^=\"/circulars/\"])",
+    "id_pattern": "^[0-9]+$",
+    "fields": {
+      "id": {"attr": "value"},
+      "title": {"sel": "a", "text": true},
+      "url": {"sel": "a", "attr": "href", "url": true},
+      "thread": {"sel": "a", "attr": "href", "url": true, "suffix": ".json"}
+    }
+  },
+  "thread": {
+    "format": "json",
+    "root_fields": {
+      "id": {"path": "/circularId", "required": true},
+      "author": {"path": "/submitter", "required": true},
+      "posted_at": {"path": "/createdOn", "time": "unix_ms", "required": true},
+      "body": {"path": "/body", "required": true}
+    }
+  },
+  "message": {
+    "from": "GCN / {author}",
+    "msgid_suffix": "nasa-gcn",
+    "kludge": "GCN",
+    "footer": true
+  }
+}

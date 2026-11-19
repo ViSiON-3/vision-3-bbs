@@ -26,6 +26,22 @@ type ScriptConfig struct {
 	// looks up art: the caller's own theme (#1099), or "" for the one the
 	// server runs.
 	MenuSetPath string
+	// DataDir is the script's data directory: the root of v3.fs, where
+	// v3.data keeps its store and v3.gfx finds pictures. "" means
+	// scripts/data as resolveDataDir finds it from WorkingDir. A theme's
+	// menu script sets it to the theme's data/.
+	DataDir string
+	// Notice, when it fires while the script waits for a key (getkey,
+	// readkey, yesno, noyes, pause), stops the script there, and Run returns
+	// ErrNotice: the BBS has something to show the caller over the script's
+	// screen and runs the script again afterwards, which draws its screen
+	// anew, starting over from its first statement: whatever the script did
+	// before that key wait, such as a write to v3.data, is done again, so
+	// such work should be safe to repeat. Keys the engine has already read
+	// in are given to the script
+	// first; the rest are returned by Close. getstr and getnum are not
+	// stopped, so a line being typed is not lost. nil never fires.
+	Notice <-chan struct{}
 }
 
 // SessionContext holds the BBS session state needed by the V3 script engine.
@@ -39,6 +55,9 @@ type SessionContext struct {
 	UserHandle   string
 	UserRealName string
 	AccessLevel  int
+	// SysOp reports that the caller is at the board's sysop level; only a
+	// sysop sees test logins in v3.nodes.
+	SysOp        bool
 	TimeLimit    int // minutes
 	TimesCalled  int
 	Location     string
@@ -48,6 +67,9 @@ type SessionContext struct {
 	// when it exceeds ScreenWidth (a saved preference), else ScreenWidth.
 	// Zero means ScreenWidth.
 	ArtWidth int
+	// Sixel reports that the caller's terminal draws sixel graphics, read
+	// by scripts as v3.gfx.sixel.
+	Sixel bool
 
 	// Session info
 	NodeNumber       int

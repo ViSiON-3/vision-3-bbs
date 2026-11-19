@@ -75,7 +75,7 @@ func (c *centralActivitySource) CentralPresence(callersDefault bool) []protocol.
 	var out []protocol.CentralActivityEntry
 	for _, sess := range c.sessions.ListActive() {
 		sess.Mutex.RLock()
-		u, invisible, node, start := sess.User, sess.Invisible, sess.NodeID, sess.StartTime
+		u, invisible, node, start := sess.User, sess.Invisible || sess.TestLogin, sess.NodeID, sess.StartTime
 		sess.Mutex.RUnlock()
 		// A session is eligible only once its login sequence is done,
 		// when the caller has answered whether the login is visible.

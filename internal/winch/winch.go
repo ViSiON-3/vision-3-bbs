@@ -13,6 +13,8 @@ import (
 	"sync"
 
 	"github.com/gliderlabs/ssh"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 )
 
 // Hub takes a session's window changes from the one channel its transport
@@ -39,7 +41,22 @@ func Own(s ssh.Session, src <-chan ssh.Window) (*Hub, <-chan ssh.Window) {
 	h := &Hub{key: base(s), done: make(chan struct{}), stopped: make(chan struct{}), subs: map[chan ssh.Window]struct{}{}}
 	owner, _ := h.Subscribe()
 	hubs.Store(h.key, h)
-	go h.run(src)
+	// A watcher that panicked must still take the transport's window changes,
+	// whose sender blocks on each until it is read, until the source closes
+	// or the session closes the hub.
+	safego.Go(safego.KindResize, s, func() { h.run(src) }, func() {
+		defer h.Close() // as run does when the source closes
+		for {
+			select {
+			case _, ok := <-src:
+				if !ok {
+					return
+				}
+			case <-h.done: // the session closed the hub
+				return
+			}
+		}
+	})
 	return h, owner
 }
 
@@ -48,6 +65,7 @@ func Own(s ssh.Session, src <-chan ssh.Window) (*Hub, <-chan ssh.Window) {
 // nowhere, since Close has emptied the subscribers.
 func (h *Hub) run(src <-chan ssh.Window) {
 	defer close(h.stopped)
+	safego.TestPoint(safego.KindResize)
 	for {
 		select {
 		case win, ok := <-src:

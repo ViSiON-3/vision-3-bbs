@@ -96,6 +96,16 @@ func runShowStats(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil // Updated return
 	}
 
+	// A theme whose YOURSTAT.MNU names a script draws the screen with it.
+	if shown, err := scriptedStats(c); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, "LOGOFF", io.EOF
+		}
+		return nil, "", err
+	} else if shown {
+		return nil, "", nil
+	}
+
 	ansFilename := "YOURSTAT.ANS"
 	// Use MenuSetPath for ANSI file
 	fullAnsPath := e.menuFile("ansi", ansFilename)

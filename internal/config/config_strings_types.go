@@ -677,6 +677,8 @@ type StringsConfig struct {
 	KonfigEncodingHelp        string `json:"konfigEncodingHelp"`
 	KonfigHotKeysLabel        string `json:"konfigHotKeysLabel"`
 	KonfigHotKeysHelp         string `json:"konfigHotKeysHelp"`
+	KonfigSixelLabel          string `json:"konfigSixelLabel"`
+	KonfigSixelHelp           string `json:"konfigSixelHelp"`
 	KonfigHeaderStyleLabel    string `json:"konfigHeaderStyleLabel"`
 	KonfigHeaderStyleHelp     string `json:"konfigHeaderStyleHelp"`
 	KonfigAutoSigLabel        string `json:"konfigAutoSigLabel"`
@@ -716,6 +718,7 @@ type StringsConfig struct {
 	KonfigEncodingAuto        string `json:"konfigEncodingAuto"`
 	KonfigEncodingSaved       string `json:"konfigEncodingSaved"`
 	KonfigEncodingMismatch    string `json:"konfigEncodingMismatch"`
+	KonfigSixelAuto           string `json:"konfigSixelAuto"`
 	KonfigRealNameRequired    string `json:"konfigRealNameRequired"`
 	KonfigRealNameTooShort    string `json:"konfigRealNameTooShort"`
 	KonfigRealNamePipe        string `json:"konfigRealNamePipe"`

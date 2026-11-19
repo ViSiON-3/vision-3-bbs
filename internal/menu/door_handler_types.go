@@ -5,6 +5,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
+	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
@@ -56,6 +57,23 @@ type DoorCtx struct {
 	Prompt   string
 	Answer   any
 	Answered bool
+	// Menu is the menu a script draws in place of its screen (v3.menu);
+	// nil for any other door.
+	Menu *scripting.MenuView
+	// Notice stops a v3_script door's script at its key wait when it fires
+	// (scripting.ScriptConfig.Notice); nil for any other door.
+	Notice <-chan struct{}
+	// IdleFrom, when set, is when the idle countdown started, before the
+	// door: a menu script run again after a notice carries on the countdown
+	// of the run before. Zero counts from the door's start.
+	IdleFrom time.Time
+	// ScriptDataDir is a v3_script door's data directory
+	// (scripting.ScriptConfig.DataDir); "" for the one beside its scripts.
+	ScriptDataDir string
+	// Guest is set for a string's script run before login (see
+	// runStringScript): User is empty, and a V3 script gets none of the
+	// APIs that read or write the user, message, file or oneliner stores.
+	Guest bool
 
 	// watch decides when the BBS must end the door. Set by executeDoor.
 	watch *doorWatch

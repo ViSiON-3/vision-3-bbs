@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/gliderlabs/ssh"
 )
@@ -161,12 +162,14 @@ func NewTelnetSessionAdapter(tc *TelnetConn) *TelnetSessionAdapter {
 			Window: ssh.Window{Width: w, Height: h},
 		},
 	}
+	tc.owner.Store(adapter) // goroutines tc starts are logged with this session's node
 
 	// Send initial window size
 	adapter.winCh <- ssh.Window{Width: w, Height: h}
 
 	// Forward NAWS updates from TelnetConn to the adapter's winCh
-	go func() {
+	safego.Go(safego.KindResize, adapter, func() {
+		safego.TestPoint(safego.KindResize)
 		for win := range tc.winCh {
 			// Update stored PTY window size under mutex
 			adapter.ptyMu.Lock()
@@ -178,7 +181,7 @@ func NewTelnetSessionAdapter(tc *TelnetConn) *TelnetSessionAdapter {
 			default:
 			}
 		}
-	}()
+	}, nil)
 
 	return adapter
 }
@@ -218,14 +221,23 @@ func (a *TelnetSessionAdapter) Read(p []byte) (int, error) {
 		}
 		stop := make(chan struct{})
 		exited := make(chan struct{})
-		go func() {
+		safego.Go(safego.KindTerminal, a, func() {
 			defer close(exited)
+			// A panic wakes the read here, before exited closes, so the
+			// wake cannot land after Read has returned and cleared it.
+			defer func() {
+				if r := recover(); r != nil {
+					a.telnetConn.Wake()
+					panic(r) // for safego.Go to log
+				}
+			}()
+			safego.TestPoint(safego.KindTerminal)
 			select {
 			case <-t.InputReady():
 				a.telnetConn.Wake()
 			case <-stop:
 			}
-		}()
+		}, nil)
 		n, err := a.telnetConn.Read(p)
 		close(stop)
 		<-exited

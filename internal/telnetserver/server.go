@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"runtime/debug"
 	"sync"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/util"
@@ -81,7 +82,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("telnet panic handling connection", "remote", remoteAddr, "panic", r)
+			slog.Error("telnet panic handling connection", "remote", remoteAddr, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
 		}
 		_ = conn.Close() // best-effort close on teardown
 		slog.Info("telnet connection closed", "remote", remoteAddr)

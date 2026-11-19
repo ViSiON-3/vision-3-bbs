@@ -135,7 +135,11 @@ for template_file in templates/configs/*.json; do
     [ "$(basename "$template_file")" = "strings.json" ] && continue
     if [ -f "$template_file" ]; then
         target_file="configs/$(basename "$template_file")"
-        if [ ! -f "$target_file" ]; then
+        # A board on the Reddit gateway's reddit.json keeps reading it until
+        # the sysop writes sources.json; a template sources.json would replace it.
+        if [ "$(basename "$target_file")" = "sources.json" ] && [ -f configs/reddit.json ]; then
+            echo "  sources.json skipped: this board still uses reddit.json."
+        elif [ ! -f "$target_file" ]; then
             echo "  Creating $(basename "$target_file") from template..."
             cp "$template_file" "$target_file"
         else

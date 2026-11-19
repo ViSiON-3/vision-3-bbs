@@ -2,6 +2,7 @@ package menu
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net"
@@ -97,12 +98,18 @@ type execcovCall struct {
 // execcovRun drives MenuExecutor.Run the way env.run drives a handler: a
 // fresh session fed c.input, connecting from env.remoteIP in env.outputMode.
 // The result's next is Run's action and user its returned user. Run's error
-// is reported as it came back.
+// is reported as it came back. The session has a context when
+// env.sessionContext is set, as a script door needs one.
 func execcovRun(env *menuEnv, c execcovCall) runResult {
 	env.t.Helper()
 	ts := newTestSession(c.input)
 	if env.remoteIP != "" {
 		ts.addr = &net.TCPAddr{IP: net.ParseIP(env.remoteIP), Port: 2222}
+	}
+	if env.sessionContext {
+		ctx, cancel := context.WithCancel(context.Background())
+		env.t.Cleanup(cancel)
+		ts.ctx = &testCtx{Context: ctx}
 	}
 	SetSessionOutputMode(ts, env.outputMode)
 	env.t.Cleanup(func() { ClearSessionOutputMode(ts) })

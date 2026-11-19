@@ -102,7 +102,7 @@ func centralAlertsSummary(u *user.User) string {
 // sendCentralAlert asks the service to announce u's action of kind, on
 // network (or, for "", on every network), if u's stored record shares
 // that kind.
-// An invisible session announces nothing. room and area go with a chat
+// An invisible session or a test login announces nothing. room and area go with a chat
 // join and a post.
 func (e *MenuExecutor) sendCentralAlert(um *user.UserMgr, sess *session.BbsSession, u *user.User, network, kind, room, area string) {
 	if e.V3NetCentral == nil || um == nil || u == nil {
@@ -110,9 +110,9 @@ func (e *MenuExecutor) sendCentralAlert(um *user.UserMgr, sess *session.BbsSessi
 	}
 	if sess != nil {
 		sess.Mutex.RLock()
-		invisible := sess.Invisible
+		hidden := sess.Invisible || sess.TestLogin
 		sess.Mutex.RUnlock()
-		if invisible {
+		if hidden {
 			return
 		}
 	}

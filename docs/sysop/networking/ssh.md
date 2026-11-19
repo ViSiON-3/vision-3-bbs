@@ -84,12 +84,14 @@ whose username matches a handle authenticates at the protocol level (password
 or keyboard-interactive) and goes straight into the login sequence, skipping
 the pre-login matrix and the `LOGIN` screen that Telnet callers see.
 
-Before the first screen the board detects the terminal's encoding: it draws
-one box-drawing character, asks the terminal where its cursor ended up, and
-waits up to 750 ms for the answer. A UTF-8 terminal and a CP437 terminal
-report different columns, and the answer overrides the guess made from the
-terminal type. A caller who has saved `utf8` or `cp437` in their User Konfig
-(`K`) overrides detection from login on. See [Encoding](advanced/encoding.md).
+Before the first screen, in `auto` mode and when the client asked for a PTY,
+the board detects the terminal's encoding: it draws one character, asks the
+terminal where its cursor ended up, and waits up to 750 ms for the answer. A
+connection without a PTY gets UTF-8, and a forced `--output-mode` skips the
+question. One column of movement means UTF-8; two
+or three, or no answer, mean CP437. The terminal type plays no part. A caller
+who has saved `utf8` or `cp437` in their User Konfig (`K`) overrides
+detection from login on. See [Encoding](advanced/encoding.md).
 
 ## Supported Clients
 
@@ -133,9 +135,12 @@ building `wfc`, registering a key, and connecting.
 
 ### Garbled art on a UTF-8 terminal
 
-The session chose the wrong encoding, usually because the caller saved `cp437`
-in `K` on a UTF-8 terminal. Have them set **Encoding** back to `Auto`. See
-[Encoding](advanced/encoding.md).
+The session chose the wrong encoding. Either the caller saved `cp437` in `K`
+on a UTF-8 terminal (have them set **Encoding** back to `Auto`), or the
+terminal did not answer the cursor query and got CP437 (have them save
+`UTF-8` in `K`; it applies from login). If the screens before login must be
+UTF-8 too, start the board with `--output-mode=utf8`, which applies to every
+caller. See [Encoding](advanced/encoding.md).
 
 ## Technical Reference
 

@@ -2,7 +2,9 @@ package menu
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"strconv"
 
@@ -13,9 +15,9 @@ import (
 // renderMenuAnsi loads the ANSI file for the current menu, resolves
 // conditional regions and pipe/token substitution, and processes it for
 // display bytes and field coordinates, converting encoding based on
-// outputMode. On a critical read/process error it writes a user-facing
-// message to the terminal and returns the wrapped error; the caller (Run)
-// is responsible for the top-level return.
+// outputMode. A screen file that cannot be read is a *screenReadError, which
+// Run passes to screenUnreadable to tell the user; a processing
+// error is returned wrapped.
 func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 	e := st.e
 	terminal := st.terminal
@@ -79,15 +81,9 @@ func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 	var ansiProcessResult ansi.ProcessAnsiResult
 	var processErr error
 	if readErr != nil {
-		slog.Error("failed to read ANSI file", "file", ansFilename, "error", readErr)
-		// Display error message to user (using new helper)
-		errMsg := fmt.Sprintf("\r\n|01Error reading screen file: %s|07\r\n", ansFilename)
-		wErr := terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(errMsg)), outputMode)
-		if wErr != nil {
-			slog.Error("failed writing screen read error", "error", wErr)
-		}
-		// Reading the screen file is critical, return error
-		return ansi.ProcessAnsiResult{}, fmt.Errorf("failed to read screen file %s: %w", ansFilename, readErr)
+		// Reading the screen file is critical; Run reports it with
+		// screenUnreadable unless the menu's script draws the menu.
+		return ansi.ProcessAnsiResult{}, &screenReadError{file: ansFilename, err: readErr}
 	}
 
 	// Process for coords and display bytes
@@ -119,6 +115,76 @@ func (st *runLoopState) renderMenuAnsi() (ansi.ProcessAnsiResult, error) {
 	// CP437 mode: DisplayBytes already contain raw CP437, pass through as-is
 
 	return ansiProcessResult, nil
+}
+
+// screenReadError is a menu screen file that could not be read.
+type screenReadError struct {
+	file string
+	err  error
+}
+
+func (e *screenReadError) Error() string {
+	return fmt.Sprintf("failed to read screen file %s: %v", e.file, e.err)
+}
+
+func (e *screenReadError) Unwrap() error { return e.err }
+
+// screenUnreadable writes the user-facing message for a screen file that
+// could not be read and returns err, the run loop's error. Other errors are
+// returned as they are.
+func (st *runLoopState) screenUnreadable(err error) error {
+	var readErr *screenReadError
+	if errors.As(err, &readErr) {
+		slog.Error("failed to read ANSI file", "file", readErr.file, "error", readErr.err)
+		errMsg := fmt.Sprintf("\r\n|01Error reading screen file: %s|07\r\n", readErr.file)
+		if wErr := terminalio.WriteProcessedBytes(st.terminal, ansi.ReplacePipeCodes([]byte(errMsg)), st.outputMode); wErr != nil {
+			slog.Error("failed writing screen read error", "error", wErr)
+		}
+	}
+	return err
+}
+
+// backFromMissingScreen sends a logged-in caller back to the menu they came
+// from when err, from screenUnreadable, is a menu screen that does not exist:
+// the error line is already on their screen, so they are asked to
+// press Enter, and the run carries on there. It reports false, and the run
+// ends with err as before, for any other error, before login, on the LOGIN
+// menu, when there is no menu to go back to, or when the caller disconnects
+// at the pause. The way back is used once: if the menu they return to has
+// lost its screen too, the run ends.
+func (st *runLoopState) backFromMissingScreen(err error) bool {
+	var readErr *screenReadError
+	if !errors.As(err, &readErr) || !errors.Is(err, fs.ErrNotExist) {
+		return false
+	}
+	back := st.previousMenuName
+	if st.currentUser == nil || st.currentMenuName == "LOGIN" || back == "" || back == st.currentMenuName {
+		return false
+	}
+	if perr := st.e.pauseHere(st.s, st.terminal, st.outputMode); perr != nil {
+		return false
+	}
+	slog.Warn("menu screen missing; caller sent back", "menu", st.currentMenuName, "back", back)
+	st.pending = nil
+	st.currentMenuName, st.previousMenuName = back, ""
+	return true
+}
+
+// scriptMayDraw reports whether the current menu has a script that can run
+// for the caller (menuScriptReady) and would draw it in place of its screen,
+// so a missing screen need not end the run before the script is tried. No
+// script runs for the next command of a chain, and LOGIN uses its screen
+// before any script.
+func (st *runLoopState) scriptMayDraw() bool {
+	if st.currentMenuName == "LOGIN" || len(st.pending) > 0 {
+		return false
+	}
+	rec, err := LoadMenu(st.currentMenuName, st.e.Menus())
+	if err != nil {
+		return false
+	}
+	_, _, _, ok := st.menuScriptReady(rec, true)
+	return ok
 }
 
 // displayMenuScreen truncates the processed ANSI to the terminal height and

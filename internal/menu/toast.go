@@ -43,6 +43,10 @@ var toastNow = time.Now
 // toastLeft is how long remains until deadline by toastNow.
 func toastLeft(deadline time.Time) time.Duration { return deadline.Sub(toastNow()) }
 
+// toastWait is the wait between a toast's frames and through its hold; tests
+// replace it to make every wait run late, as a coarse timer does.
+var toastWait = (*editor.InputHandler).WaitFor
+
 // toastRearm is how long a key that cleared an overlay holds off the next one,
 // so a queue of toasts does not flash past someone who is typing.
 var toastRearm = time.Second
@@ -129,6 +133,34 @@ func (e *MenuExecutor) nextOverlayToast(sess *session.BbsSession) (t toast.Toast
 	return t, false, false
 }
 
+// waitingToast names the toast nextOverlayToast would draw next for sess,
+// without claiming it: "page:" and its text for a live page, "toast:" and its
+// ID for a stored one, or "" when none is waiting.
+func (e *MenuExecutor) waitingToast(sess *session.BbsSession) string {
+	if sess == nil {
+		return ""
+	}
+	if page, ok := sess.PeekPage(); ok {
+		return "page:" + page
+	}
+	sess.Mutex.RLock()
+	u := sess.User
+	sess.Mutex.RUnlock()
+	if u == nil {
+		return ""
+	}
+	queue, err := e.toastStore().Peek(u.ID)
+	if err != nil {
+		return ""
+	}
+	for _, q := range queue {
+		if !sess.ToastAnnounced(q.ID) && !sess.ToastShown(q.ID) {
+			return "toast:" + q.ID
+		}
+	}
+	return ""
+}
+
 // serviceToasts is the input handler's toast hook. It runs on the reading
 // goroutine, so the screen's owner is waiting for this key and draws nothing
 // meanwhile. Only ModeBBS screens get the overlay: teleconference draws from a
@@ -136,8 +168,16 @@ func (e *MenuExecutor) nextOverlayToast(sess *session.BbsSession) (t toast.Toast
 //
 // It shows one toast and wakes itself for the next, so the read can check its
 // idle timeout and time limit in between. limit is what remains of the read's
-// wait, or 0 for no bound; the toast comes down in that time.
-func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, sess *session.BbsSession, limit time.Duration) {
+// wait, or 0 for no bound; the toast comes down in that time. drew reports
+// whether a toast went on the screen.
+func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, sess *session.BbsSession, limit time.Duration) (drew bool) {
+	return e.serviceToastsThen(s, ih, sess, limit, nil)
+}
+
+// serviceToastsThen is serviceToasts for a screen that is drawn anew once
+// the toast is down: given, takeDown is called with the row the toast was
+// drawn on in place of restoring the screen (see menuNotices).
+func (e *MenuExecutor) serviceToastsThen(s ssh.Session, ih *editor.InputHandler, sess *session.BbsSession, limit time.Duration, takeDown func(row int)) (drew bool) {
 	// Everything here, the snapshot and the lookup as well as the frames
 	// and waits, ends by this deadline, so slow output cannot stretch a
 	// toast past the read's own limit.
@@ -148,15 +188,15 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	deadline := toastNow().Add(dwell)
 	tap := tapOf(s)
 	if !sess.ToastsReady() || tap == nil {
-		return
+		return false
 	}
 	if tap.Mode() == snoop.ModeTeleconf {
 		e.serviceToastLines(s, sess)
-		return
+		return false
 	}
 	v, hasOut := sessionOutputs.Load(s)
 	if !hasOut || tap.Mode() != snoop.ModeBBS {
-		return
+		return false
 	}
 	w := v.(io.Writer)
 	// The snapshot must predate the overlay, or the replay would redraw it.
@@ -164,16 +204,16 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 	// of its own the toast waits for the next menu (see rearmToasts).
 	redraw := ih.ScreenRedraw()
 	var snap []byte
-	if redraw == nil {
+	if redraw == nil && takeDown == nil {
 		var overflowed bool
 		if snap, overflowed = tap.Snapshot(); overflowed {
 			ih.HoldToasts()
-			return
+			return false
 		}
 	}
 	t, stored, ok := e.nextOverlayToast(sess)
 	if !ok {
-		return
+		return false
 	}
 	// A fading toast comes in and goes out through the theme's ramp, inside
 	// the same dwell; one too short for the fade, or with fading off, just
@@ -191,13 +231,14 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 			e.toastStore().Release(t.ID)
 		}
 		sess.WakeToasts()
-		return
+		return false
 	}
 	first := lay.line
 	if len(ramp) > 0 {
 		first = lay.frame(ramp[0])
 	}
 	err := lay.write(w, first)
+	shown := toastNow()
 	if err == nil {
 		e.settleOverlayToast(sess, t, stored, lay.clipped)
 	}
@@ -205,38 +246,41 @@ func (e *MenuExecutor) serviceToasts(s ssh.Session, ih *editor.InputHandler, ses
 		e.toastStore().Release(t.ID)
 	}
 	if err != nil {
-		return
+		return false
 	}
 	row := lay.row
 	// A key, or a sysop's chat request or a window change (which the read
 	// services once this returns), ends any wait here: the fade stops where
 	// it is and the row goes straight back.
-	ended := fadeToast(ih, lay, w, ramp, step, true, deadline)
+	ended := fadeToast(ih, lay, w, ramp, step, true, shown, deadline)
 	if ended == editor.WaitElapsed && toastLeft(deadline) > 0 && (len(ramp) == 0 || lay.write(w, lay.line) == nil) {
 		// Hold for what is left, keeping the fade-out's share.
 		if hold := toastLeft(deadline) - fadeOut; hold > 0 {
-			ended = ih.WaitFor(hold)
+			ended = toastWait(ih, hold)
 		}
 		if ended == editor.WaitElapsed {
-			ended = fadeToast(ih, lay, w, reversed(ramp), step, false, deadline)
+			ended = fadeToast(ih, lay, w, reversed(ramp), step, false, deadline.Add(-fadeOut), deadline)
 		}
 	}
 	keyed := ended == editor.WaitInput
-	if redraw != nil {
+	if takeDown != nil {
+		takeDown(row)
+	} else if redraw != nil {
 		redraw()
 	} else if !e.restoreOverlayRow(s, w, sess, snap, row) {
 		// Same reset as the end of sysop chat: the snapshot carries its own
 		// scroll region, colours and cursor position.
 		_, _ = fmt.Fprint(w, "\x1b[r\x1b[0m\x1b[2J\x1b[H") // best-effort display
 		if _, err := w.Write(snap); err != nil {
-			return
+			return true
 		}
 	}
 	if keyed {
 		time.AfterFunc(toastRearm, sess.WakeToasts)
-		return
+		return true
 	}
 	sess.WakeToasts()
+	return true
 }
 
 // restoreOverlayRow redraws only the row an overlay covered, from a model of the
@@ -489,13 +533,19 @@ func (e *MenuExecutor) toastFade() (ramp []int, step time.Duration) {
 	return e.Theme().FadeColors(), cfg.ToastFadeStep()
 }
 
-// fadeToast draws lay through ramp, step apart, and reports what ended it:
-// WaitElapsed when it ran to the end or reached deadline, or the key or
-// interruption that cut it short. No frame is drawn, and no wait runs, past
-// deadline. drawn says the first step is on screen already. An empty ramp
-// draws nothing. A write that fails ends it as an interruption, so the
-// caller restores the row.
-func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, step time.Duration, drawn bool, deadline time.Time) editor.WaitOutcome {
+// fadeToast draws lay through ramp, step apart from start, and reports what
+// ended it: WaitElapsed when it ran to the end or reached deadline, or the
+// key or interruption that cut it short. No frame is drawn, and no wait is
+// asked for, past deadline; a timer can still return up to a tick after it,
+// so the caller's restore can start that late. drawn says the first step is
+// on screen already. An empty ramp draws nothing. A write that fails ends it
+// as an interruption, so the caller restores the row.
+//
+// Step i ends at start plus i+1 steps, not a step after its frame was
+// drawn, so a wait that runs late (Windows' timer moves in 15.6ms ticks)
+// shortens the next step instead of pushing the last frame past deadline.
+// A step already over still checks for a key or an interruption.
+func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, step time.Duration, drawn bool, start, deadline time.Time) editor.WaitOutcome {
 	for i, c := range ramp {
 		if toastLeft(deadline) <= 0 {
 			return editor.WaitElapsed
@@ -505,12 +555,17 @@ func fadeToast(ih *editor.InputHandler, lay toastDraw, w io.Writer, ramp []int, 
 				return editor.WaitInterrupted
 			}
 		}
-		// The write may have taken the time that was left.
-		left := toastLeft(deadline)
-		if left <= 0 {
+		// The write may have taken the time that was left. One reading of the
+		// clock decides both whether it did and how long this step waits.
+		now := toastNow()
+		if !now.Before(deadline) {
 			return editor.WaitElapsed
 		}
-		if out := ih.WaitFor(min(step, left)); out != editor.WaitElapsed {
+		end := start.Add(time.Duration(i+1) * step)
+		if deadline.Before(end) {
+			end = deadline
+		}
+		if out := toastWait(ih, end.Sub(now)); out != editor.WaitElapsed {
 			return out
 		}
 	}

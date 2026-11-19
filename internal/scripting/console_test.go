@@ -3,6 +3,8 @@ package scripting
 import (
 	"strings"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 )
 
 // TestConsoleOutput pins the bytes each v3.console output call emits.
@@ -46,6 +48,15 @@ func TestConsoleDimensions(t *testing.T) {
 	h := newHarness(t, harnessOpts{session: func(sc *SessionContext) { sc.ScreenWidth, sc.ScreenHeight = 132, 50 }})
 	if w, hh := h.eval("v3.console.width").ToInteger(), h.eval("v3.console.height").ToInteger(); w != 132 || hh != 50 {
 		t.Errorf("width/height = %d/%d, want 132/50", w, hh)
+	}
+}
+
+func TestConsoleEncodingProperty(t *testing.T) {
+	for _, mode := range []ansi.OutputMode{ansi.OutputModeUTF8, ansi.OutputModeCP437} {
+		h := newHarness(t, harnessOpts{session: func(sc *SessionContext) { sc.OutputMode = mode }})
+		if got := h.eval("v3.console.utf8").ToBoolean(); got != (mode == ansi.OutputModeUTF8) {
+			t.Errorf("mode %v: utf8=%v", mode, got)
+		}
 	}
 }
 

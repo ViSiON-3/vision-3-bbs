@@ -1,0 +1,52 @@
+{
+  "name": "reddit",
+  "description": "Subreddits through old.reddit.com. Each post starts a thread; comments thread under the comment they answer. Feed targets are subreddit names without r/.",
+  "fetch": "browser",
+  "threads": true,
+  "listing_url": "https://old.reddit.com/r/{feed}/new/",
+  "target_pattern": "^[A-Za-z0-9_]{2,21}$",
+  "page_origin": "https://old.reddit.com",
+  "ready": "div.content[role=\"main\"] div.thing[data-fullname^=\"t3_\"]",
+  "content": "div.content[role=\"main\"]",
+  "listing": {
+    "item": "div.thing[data-type=\"link\"]",
+    "exclude": ".child, [data-type]",
+    "id_pattern": "^t3_",
+    "fields": {
+      "id": {"attr": "data-fullname"},
+      "promoted": {"attr": "data-promoted", "skip_if": "true"},
+      "author": {"attr": "data-author", "default": "[deleted]"},
+      "title": {"sel": "a.title", "text": true},
+      "posted_at": {"attr": "data-timestamp", "time": "unix_ms"},
+      "url": {"attr": "data-permalink", "url": true, "origin": "https://www.reddit.com"},
+      "thread": {"attr": "data-permalink", "url": true},
+      "link": {"attr": "data-url", "url": true, "origin": "https://www.reddit.com"},
+      "marker": {"attr": "data-comments-count"}
+    }
+  },
+  "thread": {
+    "root": "div.thing[data-type=\"link\"]",
+    "root_fields": {
+      "id": {"attr": "data-fullname"},
+      "body": {"sel": ".md", "html": true}
+    },
+    "item": "div.thing[data-type=\"comment\"]",
+    "exclude": ".child, [data-type]",
+    "id_pattern": "^t1_",
+    "parent": "nearest_item",
+    "fields": {
+      "id": {"attr": "data-fullname"},
+      "author": {"attr": "data-author", "default": "[deleted]"},
+      "body": {"sel": ".md", "html": true},
+      "posted_at": {"sel": "time", "attr": "datetime", "time": "rfc3339"}
+    }
+  },
+  "message": {
+    "from": "u/{author}",
+    "reply_subject": "Re: {root_title}",
+    "msgid_suffix": "reddit",
+    "kludge": "REDDIT",
+    "footer": true,
+    "body_fallback": "link"
+  }
+}

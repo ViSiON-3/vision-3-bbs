@@ -1,7 +1,9 @@
 package menu
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"strings"
 	"time"
@@ -178,9 +180,21 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 
 		// Load and process the ANSI file for the current menu (conditional
 		// regions, pipe/token substitution, CP437/encoding conversion).
+		// A screen that cannot be read ends the run, unless the file does not
+		// exist and the menu has a script that can draw it; then the error
+		// stands only if the menu shows its screen after all.
 		ansiProcessResult, renderErr := st.renderMenuAnsi()
+		var screenErr error
 		if renderErr != nil {
-			return "", st.currentUser, renderErr
+			var readErr *screenReadError
+			if !errors.As(renderErr, &readErr) || !errors.Is(renderErr, fs.ErrNotExist) || !st.scriptMayDraw() {
+				err := st.screenUnreadable(renderErr)
+				if st.backFromMissingScreen(err) {
+					continue
+				}
+				return "", st.currentUser, err
+			}
+			screenErr = renderErr
 		}
 
 		// --- SPECIAL HANDLING FOR LOGIN MENU INTERACTION ---
@@ -263,49 +277,75 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		}
 		// --- End AutoRun Command Execution ---
 
-		// 3. Display ANSI Screen (Processed Bytes) - Moved display logic here for ALL menus
-		// (Avoid double-display for LOGIN which handles its own display before prompt)
-		// We still need the raw content for potential lightbar background
-		// Note: ansBackgroundBytes is currently unused but will be needed for full lightbar implementation
-		// ansBackgroundBytes := ansiProcessResult.DisplayBytes
-		if err := st.displayMenuScreen(ansiProcessResult, menuRec); err != nil {
-			return "", st.currentUser, err
-		}
-
-		// --- Check for Lightbar Menu (.BAR) ---
-		// Check if a .BAR file exists for this menu in the MENU SET directory
-		isLightbar, err := HasBarFile(st.currentMenuName, e.Menus())
-		if err != nil {
-			return "", st.currentUser, err
-		}
-		st.isLightbarMenu = isLightbar
-
-		// Variable declarations for command handling
-		// var st.userInput string // REMOVE this redeclaration
-		// var numericMatchAction string // Moved declaration up
-
-		// 4. Determine Input Mode / Method
-		// The next command of a chain stands in for the caller's selection;
-		// otherwise read one, which may itself start a chain.
+		// 3-4. The caller's selection. A menu with a script (SCRIPT in the
+		// .MNU, or the menu set's menuScript) has the script draw it and
+		// answer; one without, or whose script could not run or did not
+		// answer, shows its screen and prompt. The next command of a chain
+		// stands in for a selection, so no script runs for it.
 		var input string
 		var act loopAction
 		var retErr error
-		if st.nextChained() {
-			slog.Debug("running chained command", "menu", st.currentMenuName, "input", st.userInput, "left", len(st.pending))
-			if retAction, ended, endErr := st.chainedSessionEnded(); ended {
-				return retAction, st.currentUser, endErr
-			}
-			st.drawChainedLightbar(ansiProcessResult)
-			input, act, retErr = st.specialInput()
-		} else {
-			e.setToastAnchor(nodeNumber, ansiProcessResult, menuRec.GetClrScrBefore(), st.artScrolls)
-			input, act, retErr = st.readMenuInput(ansiProcessResult, menuRec)
-			e.clearToastAnchor(nodeNumber)
+		scripted := false
+		if len(st.pending) == 0 {
+			input, act, retErr, scripted = st.runMenuScript(menuRec, commands)
+		}
+		if scripted {
 			if act == loopFallthrough {
+				st.userInput = input
 				if !st.startChain() {
 					continue
 				}
 				input, act, retErr = st.specialInput()
+			}
+		} else {
+			if screenErr != nil {
+				err := st.screenUnreadable(screenErr)
+				if st.backFromMissingScreen(err) {
+					continue
+				}
+				return "", st.currentUser, err
+			}
+			// 3. Display ANSI Screen (Processed Bytes) - Moved display logic here for ALL menus
+			// (Avoid double-display for LOGIN which handles its own display before prompt)
+			// We still need the raw content for potential lightbar background
+			// Note: ansBackgroundBytes is currently unused but will be needed for full lightbar implementation
+			// ansBackgroundBytes := ansiProcessResult.DisplayBytes
+			if err := st.displayMenuScreen(ansiProcessResult, menuRec); err != nil {
+				return "", st.currentUser, err
+			}
+
+			// --- Check for Lightbar Menu (.BAR) ---
+			// Check if a .BAR file exists for this menu in the MENU SET directory
+			isLightbar, err := HasBarFile(st.currentMenuName, e.Menus())
+			if err != nil {
+				return "", st.currentUser, err
+			}
+			st.isLightbarMenu = isLightbar
+
+			// Variable declarations for command handling
+			// var st.userInput string // REMOVE this redeclaration
+			// var numericMatchAction string // Moved declaration up
+
+			// 4. Determine Input Mode / Method
+			// The next command of a chain stands in for the caller's selection;
+			// otherwise read one, which may itself start a chain.
+			if st.nextChained() {
+				slog.Debug("running chained command", "menu", st.currentMenuName, "input", st.userInput, "left", len(st.pending))
+				if retAction, ended, endErr := st.chainedSessionEnded(); ended {
+					return retAction, st.currentUser, endErr
+				}
+				st.drawChainedLightbar(ansiProcessResult)
+				input, act, retErr = st.specialInput()
+			} else {
+				e.setToastAnchor(nodeNumber, ansiProcessResult, menuRec.GetClrScrBefore(), st.artScrolls)
+				input, act, retErr = st.readMenuInput(ansiProcessResult, menuRec)
+				e.clearToastAnchor(nodeNumber)
+				if act == loopFallthrough {
+					if !st.startChain() {
+						continue
+					}
+					input, act, retErr = st.specialInput()
+				}
 			}
 		}
 		switch act {

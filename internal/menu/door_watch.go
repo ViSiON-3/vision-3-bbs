@@ -11,6 +11,7 @@ import (
 	"github.com/gliderlabs/ssh"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/timeleft"
 )
 
@@ -36,6 +37,19 @@ var doorHangupGrace = 5 * time.Second
 // readInterrupter is a session whose blocked Read can be cancelled.
 type readInterrupter interface {
 	SetReadInterrupt(<-chan struct{})
+}
+
+// endDoorIfPanicking, deferred in a goroutine relaying a door after its own
+// deferred calls that report it finished, ends the door as for a caller who
+// hung up if the goroutine is panicking, and passes the panic on for
+// safego.Go to log. It runs before those calls, so the door's end is
+// recorded before the relay can freeze its watch. Ending the door ends the
+// caller's session too.
+func (ctx *DoorCtx) endDoorIfPanicking() {
+	if r := recover(); r != nil {
+		ctx.watch.end(doorEndDisconnect)
+		panic(r)
+	}
 }
 
 // doorEndReason is why a door was ended by the BBS rather than by itself.
@@ -81,18 +95,21 @@ type doorWatch struct {
 	mu     sync.Mutex
 	frozen bool          // the watch has stopped for good
 	reason doorEndReason // why the door was ended, once ended is closed
+	// idleFrom is when the idle countdown last started: the start of the
+	// watch, the time continueIdle gave, or the caller's last input.
+	idleFrom time.Time
 }
 
 // newDoorWatch starts watching. idleTimeout 0 means no idle timeout, and a
 // zero deadline means no time limit.
 func newDoorWatch(idleTimeout time.Duration, deadline time.Time) *doorWatch {
-	w := &doorWatch{idleTimeout: idleTimeout, ended: make(chan struct{})}
+	w := &doorWatch{idleTimeout: idleTimeout, ended: make(chan struct{}), idleFrom: time.Now()}
 	// A timer can fire before AfterFunc returns (a deadline already past),
 	// and end reads the timer fields, so they are set under the lock.
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if idleTimeout > 0 {
-		w.idleTimer = time.AfterFunc(idleTimeout, func() { w.end(doorEndIdle) })
+		w.idleTimer = time.AfterFunc(idleTimeout, w.idleExpired)
 	}
 	if !deadline.IsZero() {
 		w.limitTimer = time.AfterFunc(time.Until(deadline), func() { w.end(doorEndTimeLimit) })
@@ -108,6 +125,11 @@ func (w *doorWatch) end(reason doorEndReason) {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.endLocked(reason)
+}
+
+// endLocked is end with w.mu held.
+func (w *doorWatch) endLocked(reason doorEndReason) {
 	if w.frozen {
 		return
 	}
@@ -115,6 +137,22 @@ func (w *doorWatch) end(reason doorEndReason) {
 	w.reason = reason
 	w.stopTimersLocked()
 	close(w.ended)
+}
+
+// idleExpired is the idle timer's callback. Reset cannot stop a callback
+// that has already started, so input that came while it waited for the lock
+// leaves the countdown running from that input instead of ending the door.
+func (w *doorWatch) idleExpired() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.frozen {
+		return
+	}
+	if left := w.idleTimeout - time.Since(w.idleFrom); left > 0 {
+		w.idleTimer.Reset(left)
+		return
+	}
+	w.endLocked(doorEndIdle)
 }
 
 func (w *doorWatch) stopTimersLocked() {
@@ -131,9 +169,38 @@ func (w *doorWatch) stopTimersLocked() {
 func (w *doorWatch) touch() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if !w.frozen && w.idleTimer != nil {
-		w.idleTimer.Reset(w.idleTimeout)
+	if !w.frozen {
+		w.idleFrom = time.Now()
+		if w.idleTimer != nil {
+			w.idleTimer.Reset(w.idleTimeout)
+		}
 	}
+}
+
+// continueIdle counts the idle timeout from from, a time before the watch
+// started, instead of from the start: a menu script run again after a notice
+// (see menuNotices) carries on the countdown of the run before. A zero from
+// changes nothing.
+func (w *doorWatch) continueIdle(from time.Time) {
+	if from.IsZero() {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.frozen {
+		return
+	}
+	w.idleFrom = from
+	if w.idleTimer != nil {
+		w.idleTimer.Reset(max(w.idleTimeout-time.Since(from), 0))
+	}
+}
+
+// idleSince returns when the idle countdown last started (see idleFrom).
+func (w *doorWatch) idleSince() time.Time {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.idleFrom
 }
 
 // freeze stops the watch for good, keeping whether and why it had ended the
@@ -276,7 +343,14 @@ func runDoorWatched(ctx *DoorCtx, run func(*DoorCtx) error) error {
 		slog.Info("door not started: time limit reached", "node", ctx.NodeNumber, "door", ctx.DoorName)
 		return editor.ErrTimeLimit
 	}
+	// A countdown carried on from an earlier run (IdleFrom) may already be
+	// over; the door would end at once, but a short one could finish first.
+	if ctx.IdleTimeout > 0 && !ctx.IdleFrom.IsZero() && time.Since(ctx.IdleFrom) >= ctx.IdleTimeout {
+		slog.Info("door not started: caller idle", "node", ctx.NodeNumber, "door", ctx.DoorName)
+		return editor.ErrIdleTimeout
+	}
 	ctx.watch = newDoorWatch(ctx.IdleTimeout, deadline)
+	ctx.watch.continueIdle(ctx.IdleFrom)
 	defer ctx.watch.freeze()
 	// The door reads the session next, so the trailer of an Enter read before
 	// it is the door's to drop.
@@ -301,13 +375,14 @@ func runDoorWatched(ctx *DoorCtx, run func(*DoorCtx) error) error {
 // once connected.
 func doorDialContext(ctx *DoorCtx) (context.Context, context.CancelFunc) {
 	dialCtx, cancel := context.WithCancel(context.Background())
-	go func() {
+	safego.Go(safego.KindDoorWatch, ctx.NodeNumber, func() {
+		safego.TestPoint(safego.KindDoorWatch)
 		select {
 		case <-ctx.watch.Ended():
 			cancel()
 		case <-dialCtx.Done():
 		}
-	}()
+	}, cancel)
 	return dialCtx, cancel
 }
 
@@ -320,7 +395,11 @@ func watchDoorProcess(ctx *DoorCtx, p *os.Process) (stop func()) {
 	}
 	exited := make(chan struct{})
 	grace := doorHangupGrace
-	go func() {
+	// Taken now, while the door runs: once it is reaped its group cannot be
+	// looked up, though a child of it may still be running.
+	pgid := doorGroupOf(p)
+	safego.Go(safego.KindDoorWatch, ctx.NodeNumber, func() {
+		safego.TestPoint(safego.KindDoorWatch)
 		select {
 		case <-exited:
 			return
@@ -328,8 +407,12 @@ func watchDoorProcess(ctx *DoorCtx, p *os.Process) (stop func()) {
 		}
 		slog.Info("hanging up on door", "node", ctx.NodeNumber, "door", ctx.DoorName,
 			"reason", ctx.watch.endReason().String())
-		hangUpDoorProcess(p, exited, grace)
-	}()
+		hangUpDoorProcess(p, pgid, exited, grace)
+	}, func() {
+		// Nothing would hang up on the door later, so it is ended now,
+		// with any children it started.
+		killProcessGroupOf(pgid, p)
+	})
 	var once sync.Once
 	return func() {
 		once.Do(func() {

@@ -14,5 +14,6 @@ networking, V3Net, and the `v3mail` utility.
 - **[FTN Nodelists](messages/nodelists.md)** — compiling nodelists and looking systems up
 - **[JAM Echomail](messages/jam-echomail.md)** — echomail in JAM message bases
 - **[V3Net Networking](v3net/message-areas.md)** — native inter-BBS message networking via REST+SSE
+- **[NNTP Newsgroups](messages/nntp.md)** — public text groups imported into read-only local areas
 - **[V3Mail](messages/v3mail.md)** — the `v3mail` message base and mail utility
 - **[Header Placeholders](messages/placeholders.md)** — MSGHDR.* template tokens

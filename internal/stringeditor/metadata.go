@@ -806,5 +806,10 @@ func stringCatalog() []StringEntry {
 		{Label: "ACS Test: Width", Key: "acsTestWidthPrompt", Description: "Prompt for the width the made-up call's menus render at, for WIDTH"},
 		{Label: "ACS Test: Address", Key: "acsTestAddrPrompt", Description: "Prompt for a remote made-up call's IP address, for IP"},
 		{Label: "ACS Test: Bad Value", Key: "acsTestBadValue", Description: "Shown when a node, connection, encoding, width or address answer can't be used"},
+
+		// Konfig's Sixel Graphics setting
+		{Label: "Konfig: Sixel Label", Key: "konfigSixelLabel", Description: "Setting name in the form. Plain text, no colour codes; 15 characters fit"},
+		{Label: "Konfig: Sixel Help", Key: "konfigSixelHelp", Description: "Help line shown while Sixel Graphics is highlighted"},
+		{Label: "Konfig: Sixel Auto Set", Key: "konfigSixelAuto", Description: "Sixel Graphics set back to Auto"},
 	}
 }

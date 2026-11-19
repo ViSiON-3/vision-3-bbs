@@ -295,14 +295,20 @@ func runCfgTwitList(c *cmdCtx, args string) (*user.User, string, error) {
 			uiPause(readerNoticePause)
 			return u, "", nil
 		}
-		if page, err = drawTwitScreen(c, page, notice); err != nil {
-			return u, "", err
-		}
-		notice = ""
-		choice, err := readLineFromSessionIH(c.s, c.terminal)
-		if err != nil {
+		var choice string
+		var scripted bool
+		if page, choice, scripted, err = scriptedTwitScreen(c, page, notice); err != nil {
 			return u, "LOGOFF", err
 		}
+		if !scripted {
+			if page, err = drawTwitScreen(c, page, notice); err != nil {
+				return u, "", err
+			}
+			if choice, err = readLineFromSessionIH(c.s, c.terminal); err != nil {
+				return u, "LOGOFF", err
+			}
+		}
+		notice = ""
 		switch strings.ToUpper(strings.TrimSpace(choice)) {
 		case "", "Q":
 			return u, "", nil
@@ -388,5 +394,7 @@ func editTwitList(st *konfigState) error {
 	}
 	st.redraw = true
 	_, _, err := runCfgTwitList(st.c, "")
+	// A scripted Twit List ran with its own input handler.
+	st.ih = getSessionIH(st.c.s)
 	return err
 }

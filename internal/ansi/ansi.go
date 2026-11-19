@@ -27,7 +27,7 @@ type OutputMode int
 // connects; the rendering code treats any mode other than OutputModeCP437 as
 // UTF-8.
 const (
-	OutputModeAuto  OutputMode = iota // Default: Detect based on TERM variable
+	OutputModeAuto  OutputMode = iota // Default: detect by asking the terminal at connect
 	OutputModeUTF8                    // Force UTF-8 character output
 	OutputModeCP437                   // Force raw CP437 byte output
 )

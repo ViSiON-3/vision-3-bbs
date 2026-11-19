@@ -51,6 +51,8 @@ type harnessOpts struct {
 	workingDir string
 	// prompt is the prompt kind the script stands in for (ScriptConfig.Prompt).
 	prompt string
+	// notice is ScriptConfig.Notice.
+	notice <-chan struct{}
 }
 
 // newHarness builds an engine for one test and registers its cleanup.
@@ -106,6 +108,7 @@ func newHarness(t *testing.T, o harnessOpts) *scriptHarness {
 		Args:       o.args,
 		MaxRunTime: o.maxRunTime,
 		Prompt:     o.prompt,
+		Notice:     o.notice,
 	}, o.providers)
 
 	h := &scriptHarness{

@@ -1,6 +1,8 @@
 package scripting
 
 import (
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
@@ -54,7 +56,74 @@ func registerUsers(v3 *goja.Object, eng *Engine) {
 		return arr
 	})
 
+	// publicList() — alphabetical public directory. Match LISTUSERS visibility
+	// and expose only its columns, rather than account/profile details.
+	jsutil.Set(obj, "publicList", func(call goja.FunctionCall) goja.Value {
+		all := eng.providers.UserMgr.GetAllUsers()
+		sort.Slice(all, func(i, j int) bool {
+			a, b := strings.ToLower(all[i].Handle), strings.ToLower(all[j].Handle)
+			if a == b {
+				return all[i].ID < all[j].ID
+			}
+			return a < b
+		})
+		arr := vm.NewArray()
+		n := 0
+		for _, u := range all {
+			if u.DeletedUser {
+				continue
+			}
+			entry := vm.NewObject()
+			jsutil.Set(entry, "handle", u.Handle)
+			jsutil.Set(entry, "location", u.GroupLocation)
+			jsutil.Set(entry, "accessLevel", u.AccessLevel)
+			jsutil.Set(entry, "validated", u.Validated)
+			jsutil.Set(arr, intToStr(n), entry)
+			n++
+		}
+		return arr
+	})
+
+	// lastCallers(n) — the n most recent calls, newest first, leaving out
+	// invisible logins. n defaults to 10; 0 or less returns every call.
+	jsutil.Set(obj, "lastCallers", func(call goja.FunctionCall) goja.Value {
+		limit := 10
+		if len(call.Arguments) > 0 {
+			limit = int(call.Arguments[0].ToInteger())
+		}
+		arr := vm.NewArray()
+		n := 0
+		history := eng.providers.UserMgr.GetLastCallers()
+		for i := len(history) - 1; i >= 0; i-- {
+			if limit > 0 && n == limit {
+				break
+			}
+			if history[i].Invisible {
+				continue
+			}
+			jsutil.Set(arr, intToStr(n), callToJS(vm, history[i]))
+			n++
+		}
+		return arr
+	})
+
 	jsutil.Set(v3, "users", obj)
+}
+
+// callToJS converts a call log record to a JS object.
+func callToJS(vm *goja.Runtime, r user.CallRecord) goja.Value {
+	obj := vm.NewObject()
+	jsutil.Set(obj, "callNumber", r.CallNumber)
+	jsutil.Set(obj, "userID", r.UserID)
+	jsutil.Set(obj, "handle", r.Handle)
+	jsutil.Set(obj, "location", r.GroupLocation)
+	jsutil.Set(obj, "node", r.NodeID)
+	jsutil.Set(obj, "connectTime", r.ConnectTime.Unix())
+	jsutil.Set(obj, "disconnectTime", r.DisconnectTime.Unix())
+	jsutil.Set(obj, "minutes", int(r.Duration.Minutes()))
+	jsutil.Set(obj, "from", r.From)
+	jsutil.Set(obj, "actions", r.Actions)
+	return obj
 }
 
 // userToJS converts a *user.User to a JS object with safe fields only.
@@ -70,6 +139,8 @@ func userToJS(vm *goja.Runtime, u *user.User) goja.Value {
 	jsutil.Set(obj, "messagesPosted", u.MessagesPosted)
 	jsutil.Set(obj, "uploads", u.NumUploads)
 	jsutil.Set(obj, "downloads", u.NumDownloads)
+	jsutil.Set(obj, "uploadedBytes", u.UploadedBytes)
+	jsutil.Set(obj, "downloadedBytes", u.DownloadedBytes)
 	jsutil.Set(obj, "filePoints", u.FilePoints)
 	jsutil.Set(obj, "validated", u.Validated)
 	jsutil.Set(obj, "lastLogin", u.LastLogin.Unix())

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -276,7 +277,7 @@ func TestTwitDefaultsMatchShippedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if *rec != twitDefaultMenu {
+	if !reflect.DeepEqual(*rec, twitDefaultMenu) {
 		t.Errorf("TWITLIST.MNU = %+v, built-in %+v", *rec, twitDefaultMenu)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -216,19 +217,35 @@ func runLoginDoor(c *cmdCtx, args string) (*user.User, string, error) {
 		hasInterrupt = true
 	}
 
+	// As a stdio door's: once the script has exited, a child it left holding
+	// its output is waited for only this long, so it cannot hold the login.
+	cmd.WaitDelay = doorOutputDrainTimeout
+	// Its own process group, as a door's, so a panic below can end the
+	// script together with anything it started (killProcessGroupOf).
+	setDoorProcessGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		slog.Warn("login door script failed to start", "node", nodeNumber, "path", scriptPath, "error", err)
 		return currentUser, "", nil
 	}
+	// The script leads its group, so the group's ID is its own; kept here
+	// for the panic action, which may come after the script is reaped.
+	pgid := cmd.Process.Pid
 	inputDone := make(chan struct{})
 	var left doorInputCopy // set by the input goroutine, for after inputDone
-	go func() {
+	safego.Go(safego.KindLoginStep, nodeNumber, func() {
 		defer close(inputDone)
+		safego.TestPoint(safego.KindLoginStep)
 		// Ends on interrupt, disconnect or a closed pipe; closing stdin then
 		// hands a disconnect on to the script as end of input.
 		left, _ = copyDoorInput(stdin, s, readInterrupt, takeEnterTrailer(s))
 		_ = stdin.Close()
-	}()
+	}, func() {
+		// A script that runs on at end of input, or a child it started
+		// holding its output open, would hold the login up: nothing else
+		// ends them, so the script's process group is killed.
+		killProcessGroupOf(pgid, cmd.Process)
+		_ = stdin.Close()
+	})
 
 	if err := cmd.Wait(); err != nil {
 		slog.Warn("login door script exited with error", "node", nodeNumber, "path", scriptPath, "error", err)

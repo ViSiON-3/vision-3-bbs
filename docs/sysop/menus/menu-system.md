@@ -172,7 +172,10 @@ Everything that reads the menu set goes through the overlay: menu screens and
 prompts, `.MNU`/`.CFG`/`.BAR` definitions, templates (including the message
 header styles under `templates/message_headers/`), `PRELOGON` screens, the
 full-screen editor's own screens, `theme.json`, art displayed by scripts, and
-`menuedit`.
+`menuedit`. The connection check and the login matrix do not: they are read
+from the board's `prelogin/`, else the shipped `menus/v3` without its overlay,
+so changes to them go in `prelogin/` (see
+[Pre-login screens](configuration/adding-a-theme.md#pre-login-screens)).
 
 **What to know:**
 
@@ -604,11 +607,16 @@ SSH users with known accounts skip the matrix screen entirely (auto-login to MAI
 
 ### Configuration
 
-The matrix uses the standard menu file system with three files:
+The matrix belongs to the board, not to a theme: its files are read from the
+board's `prelogin/` directory, else the shipped `menus/v3`, whatever theme the
+board or a caller runs (see
+[Pre-login screens](configuration/adding-a-theme.md#pre-login-screens)). It
+uses these files:
 
-1. `menus/v3/bar/PDMATRIX.BAR` — Lightbar option layout (positions, colors, hotkeys, text)
-2. `menus/v3/cfg/PDMATRIX.CFG` — Command definitions mapping hotkeys to actions
-3. `menus/v3/mnu/PDMATRIX.MNU` — Menu settings (optional, for consistency)
+1. `prelogin/bar/PDMATRIX.BAR` — Lightbar option layout (positions, colors, hotkeys, text)
+2. `prelogin/cfg/PDMATRIX.CFG` — Command definitions mapping hotkeys to actions
+
+The shipped copies are `menus/v3/bar/PDMATRIX.BAR` and `menus/v3/cfg/PDMATRIX.CFG`.
 
 **PDMATRIX.BAR:**
 
@@ -673,11 +681,96 @@ After 10 actions without logging in, the session is automatically disconnected (
 
 ### ANSI Art
 
-Place a `PDMATRIX.ANS` file in `menus/v3/ansi/` with the visual layout. The option text from the BAR file is drawn over the ANSI art at the specified X,Y coordinates — design the art to leave space for option text at those positions.
+Place a `PDMATRIX.ANS` file in `prelogin/ansi/` with the visual layout. The option text from the BAR file is drawn over the ANSI art at the specified X,Y coordinates — design the art to leave space for option text at those positions.
+
+Optionally add `ansi/PDMATRIX.PNG` to `prelogin/`.
+On a known sixel-capable terminal, the matrix draws that PNG at the top of the
+screen, centered horizontally, before its native options. It must be no larger
+than 640×160 pixels and 8 MiB. Other terminals, small screens, and missing or
+invalid images use `PDMATRIX.ANS` alone. Keep the fallback art and BAR layout
+coordinated with the picture. The native matrix handles login, signup, access
+checking, and disconnect.
+
+### Sounds
+
+`prelogin/` may add two tones beside `PDMATRIX.ANS`:
+
+| File | Played |
+| --- | --- |
+| `ansi/PDMATRIX.MOVE.WAV` | when the highlight moves to another choice |
+| `ansi/PDMATRIX.CHOOSE.WAV` | when Enter, a hot key or a number picks a choice, before the matrix acts on it |
+
+They are sent only to a terminal that said at connect that libsndfile is present
+and that it plays WAV with 8-bit unsigned PCM (SyncTERM 1.10 nightlies, IcyTERM
+0.9 and later); other terminals get no audio commands. Each file must be WAV,
+8-bit unsigned PCM, 22050 Hz, mono, and at most 64 KiB; a file in another format
+is skipped with a warning in the log. Either file may be left out, and a set with
+neither plays nothing. Each tone cuts off the one still playing, so a held arrow
+key does not queue tones. To convert another sound, keeping at most two
+seconds of it (about 44 KB):
+
+```sh
+ffmpeg -i input.wav -t 2 -ac 1 -ar 22050 -c:a pcm_u8 -map_metadata -1 PDMATRIX.MOVE.WAV
+```
+
+Check that the result is no larger than 64 KiB (65,536 bytes); about 2.9
+seconds fit.
+
+The tones are loaded into the terminal once, when the matrix is first drawn.
+
+### Effects
+
+For a layout designed for the effects, an optional `ansi/PDMATRIX.EFX` file
+can contain `{"heat":true,"polygons":true,"textFade":true,"projectText":true}`. On a known
+sixel terminal with an opaque PNG containing at most 256 colours, these enable
+the animated logo, two tumbling shapes, and a moving grayscale fade on the
+choices. `projectText` projects the actual matrix choices onto a rotating cube
+in columns 21–60, rows 9–23; reserve that area for the graphic. Disable `polygons` when using
+`projectText`, because their drawing areas overlap. The ordinary
+text menu remains the fallback on terminals without sixel. The shapes occupy columns 2–25 and 56–79, rows 11–23 on an 80-column
+screen; reserve those areas in the ANSI art and BAR file. Other terminals and
+invalid or absent effect files use the ordinary matrix. Animation polls input
+without extending the session's idle timeout. Image frames share the logo's
+palette and may use significant bandwidth, so choose the effects for your
+callers and layout.
+
+With `projectText`, four more settings in `PDMATRIX.EFX` change the scene:
+
+- `"layout": "side"` draws the picture on the left and the cube on the right,
+  level with each other. The picture's art, without its black background, is
+  as far from the left border as the cube is from the right border. The picture may then be up
+  to 320×240 pixels, the size of the cube; without this setting the cube is
+  drawn over a centred picture of at most 640×160. A picture larger than
+  640×160 that cannot be animated (it is not opaque or has more than 256
+  colours) is not shown, since the plain matrix would draw it over the
+  choices.
+- `"cubeTint": "#rrggbb"` makes the cube clear glass of that colour in place
+  of amber glass. Its faces carry no reflections, so the particles inside and
+  the lettering on the far faces show through; the edges keep their glint.
+  The scrolling line is drawn in the same colour. The selected choice is
+  drawn white on a bar of the tint, and the other choices are dimmer.
+
+- `"glitter": true` turns the particles inside the cube from embers rising
+  through it into flakes that circle its axis and flash white.
+
+- `"pixelAspect": 1.2` draws the cube for screens whose pixels are that
+  much taller than they are wide. SyncTERM shows its 640×400 screen at 4:3,
+  so a cube drawn for square pixels looks tall there; 1.2 makes it as tall
+  as it is wide. Leave it out for terminals with square pixels. Values from
+  0.5 to 2 are accepted; below 1 the cube is drawn narrower instead.
+
+With `projectText`, a terminal that gets the scene is not sent `PDMATRIX.ANS`
+or the text choices, on the first draw or on a redraw; the choices are on the
+cube. The text screen is drawn when the scene cannot start.
+
+The cube and the scrolling line bring their own colours, so the choices stay
+readable whatever the picture's colours are. The picture and the cube share
+256 colours, of which 64 are kept for the cube. A picture with more than 192
+colours is reduced to 192.
 
 ### Disabling the Matrix Screen
 
-If `menus/v3/bar/PDMATRIX.BAR` does not exist or cannot be loaded, the matrix screen is skipped and telnet users go directly to the LOGIN menu. The same applies if the CFG file or ANSI file is missing.
+If `PDMATRIX.BAR` is in neither `prelogin/bar/` nor `menus/v3/bar/`, or cannot be loaded, the matrix screen is skipped and telnet users go directly to the LOGIN menu. The same applies if the ANSI file is missing, or the CFG file is unreadable or not valid JSON. A missing CFG file does not skip the matrix: it is drawn, but none of its choices does anything. `./vision3 doctor` warns about each case under **pre-login**.
 
 ## Pre-Login ANSI Files (PRELOGON)
 
@@ -1061,6 +1154,8 @@ colour's blink bit (backgrounds 8-15) is kept as it was.
 | `yesNoRegularColor` | `13` | The unhighlighted yes/no choice and command bar options |
 | `chatSysopColor` | `11` | Sysop's text in [split-screen chat](how-to-guides/wfc-console.md#chat), where the chat screen sets no colour of its own |
 | `chatUserColor` | `10` | Caller's text in split-screen chat, likewise |
+| `name` | (the directory name) | The theme's name in Konfig's theme list and Theme value; see [Name and description](configuration/adding-a-theme.md#name-and-description) |
+| `description` | (none) | One line, up to 60 columns, shown under Konfig's theme list for the highlighted theme |
 | `sysopChatScreen` | (none) | The [chat screen](#chat-screens) split-screen chat opens with; empty means the built-in layout, `random` one of the set's screens each chat |
 | `toastFadeColors` | `"8,7,15"` | The colours a [toast](users/login-sequence.md#toasts) fades in through, and out through in reverse, when the board has `toastFade` on: 1 to 8 foreground colours `0`-`15`, comma-separated, in fade-in order. A value that can't be read uses the default. Set it in `./config` under **Theme → Toasts → Fade Colors**, with the colour picker |
 
@@ -1268,6 +1363,7 @@ Menu configuration files are JSON files that define menu behavior and prompts.
 - `MES_CONF` - Auto-switch user's active message conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.Mes_Conf`)*
 - `FILE_CONF` - Auto-switch user's active file conference when entering this menu; 0 = no change *(currently unused — reserved from Pascal `MenuRec.File_Conf`)*
 - `FORCEHOTKEY` - Force single-keypress (hotkey) input for this menu regardless of the user's Hot Keys setting. A key that could start a longer command (a multi-key command, a number on a `##` menu, `/G`, or `;` to [chain commands](#chaining-commands)) still waits for Enter.
+- `SCRIPT` - Optional. A `v3_script` door that draws the menu and answers its prompt, in place of the `.ANS` screen and the prompt: the door's code from `doors.json`, then any words to pass it as arguments (`"SUBMENU blue"`). See [Menus drawn by a script](../scripting/vpl-scripting.md#menus-drawn-by-a-script). Without it the menu takes `menuScript` from the menu set's `theme.json`; `"NONE"` turns that off for this menu.
 
 ### Command Definition Files (.CFG)
 
@@ -1305,6 +1401,7 @@ Command files are JSON arrays that define what happens when users press keys.
 - `ACS` - Access control string
 - `HIDDEN` - Whether command is hidden from display
 - `NODE_ACTIVITY` - Optional text shown in Who's Online while the command runs; it reverts to the menu's default when the command finishes. On a `//` or `~~` entry it sets that default for the whole menu (otherwise the default is the menu name).
+- `LABEL` - Optional text a menu script shows for the command. When any command of a menu has one, the script is given only the labelled commands; the others still work as keys.
 
 #### Example: a Main Menu entry
 

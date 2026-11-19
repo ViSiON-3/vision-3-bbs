@@ -1,0 +1,64 @@
+{
+  "replies": [
+    {
+      "id": "t1_c1",
+      "parent_id": "t3_aaa111",
+      "title": "",
+      "author": "carol",
+      "posted_at": "2026-10-03T01:00:00Z",
+      "body": "\u003cp\u003eTop level\u003c/p\u003e",
+      "url": "",
+      "thread": "",
+      "link": "",
+      "marker": ""
+    },
+    {
+      "id": "t1_c2",
+      "parent_id": "t1_c1",
+      "title": "",
+      "author": "dave",
+      "posted_at": "2026-10-03T02:00:00Z",
+      "body": "\u003cp\u003eNested reply\u003c/p\u003e",
+      "url": "",
+      "thread": "",
+      "link": "",
+      "marker": ""
+    },
+    {
+      "id": "t1_c3",
+      "parent_id": "t3_aaa111",
+      "title": "",
+      "author": "[deleted]",
+      "posted_at": "2026-10-03T03:00:00Z",
+      "body": "\u003cp\u003e[removed]\u003c/p\u003e",
+      "url": "",
+      "thread": "",
+      "link": "",
+      "marker": ""
+    },
+    {
+      "id": "t1_c5",
+      "parent_id": "t1_c3",
+      "title": "",
+      "author": "frank",
+      "posted_at": "2026-10-03T03:30:00Z",
+      "body": "\u003cp\u003eReply to a removed comment\u003c/p\u003e",
+      "url": "",
+      "thread": "",
+      "link": "",
+      "marker": ""
+    }
+  ],
+  "root": {
+    "id": "t3_aaa111",
+    "parent_id": "",
+    "title": "",
+    "author": "",
+    "posted_at": "0001-01-01T00:00:00Z",
+    "body": "\u003cp\u003eHello \u003ca href=\"https://example.com\"\u003ethere\u003c/a\u003e\u003c/p\u003e",
+    "url": "",
+    "thread": "",
+    "link": "",
+    "marker": ""
+  }
+}

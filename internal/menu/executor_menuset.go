@@ -12,6 +12,9 @@ import (
 // It is derived rather than stored so a MenuExecutor built as a struct
 // literal — every test does this — behaves the same as one from NewExecutor.
 func (e *MenuExecutor) Menus() menuset.Set {
+	if e.menuSet != nil {
+		return *e.menuSet
+	}
 	return menuset.FromPath(e.MenuSetPath)
 }
 

@@ -65,7 +65,8 @@ func (e *MenuExecutor) RunChallengeGate(
 		strayLimit = 8
 	}
 
-	prompt := gatePromptOrFallback(e, cfg.ChallengeGateFile, nodeNumber)
+	// The art is the board's, whatever its theme (preloginView).
+	prompt := gatePromptOrFallback(e.preloginView(), cfg.ChallengeGateFile, nodeNumber)
 	prompt = substituteGateTokens(prompt, cfg.ChallengeGateKey, required)
 	// Make wraps explicit before locating the countdown field, so its row is
 	// right on terminals wider than the art.

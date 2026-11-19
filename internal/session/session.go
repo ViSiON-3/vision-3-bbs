@@ -47,6 +47,7 @@ type BbsSession struct {
 	LastActivity time.Time            // Tracks last user input for idle calculation
 	PendingPages []pendingPage        // Live-only toasts waiting to be shown; not kept across a restart
 	Invisible    bool                 // True if user logged in invisibly (SysOp/CoSysOp only)
+	TestLogin    bool                 // The account is a test account: the call is not recorded or counted, and only a sysop sees it online
 	Tap          *snoop.Tap           // WFC snoop point for this node; nil in tests
 	ChatCredit   func() time.Duration // Sysop chat time credited to the caller; nil means none
 	// Size returns the caller's live terminal size. The SSH session handler

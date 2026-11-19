@@ -60,15 +60,7 @@ terminal can draw.
    exchange waits up to 2 seconds for its answer, so a reply that arrives in
    several packets on a slow link is not missed. A client that never answers,
    such as a raw `nc` connection, is treated as `ansi`.
-2. **Encoding.** The terminal name is a guess at whether the terminal draws
-   CP437 (the DOS character set BBS art is drawn in) or UTF-8. The board then
-   asks the terminal directly: it draws one box-drawing character, asks where
-   the cursor ended up, and waits up to 750 ms for the answer. A UTF-8 terminal
-   reports the cursor one cell on, a CP437 terminal three. The answer overrides
-   the guess; no answer keeps it. A caller who has saved `utf8` or `cp437` in
-   their User Konfig (`K`) overrides both from login on. See
-   [Encoding](advanced/encoding.md).
-3. **Screen size.** The server asks the terminal to move its cursor to the far
+2. **Screen size.** The server asks the terminal to move its cursor to the far
    corner and report where it landed (waiting up to 3 seconds), which measures
    the rows that are actually usable: SyncTERM's status line takes one row away
    from the size the client advertises. That measurement wins over the size the
@@ -76,6 +68,15 @@ terminal can draw.
    figure arrives later. If neither answers, the session runs at 80×25. The
    width is passed through as reported so wider terminals get art hard-wrapped
    correctly; the height is capped at 25 rows.
+3. **Encoding.** In `auto` mode the board asks the terminal whether it draws
+   CP437 (the DOS character set BBS art is drawn in) or UTF-8; the terminal
+   name plays no part. A forced `--output-mode` skips this step; the device
+   attributes queries that decide sixel graphics are sent either way. It
+   draws one character, `⌂`, asks where the cursor ended up, and waits up to
+   750 ms for the answer. One column of movement means UTF-8;
+   two or three, or no answer, mean CP437. A caller who has saved `utf8` or
+   `cp437` in their User Konfig (`K`) overrides it from login on. See
+   [Encoding](advanced/encoding.md).
 4. **Login.** Telnet has no protocol-level login, so the caller lands on the
    pre-login matrix and then the `LOGIN` screen, unlike an SSH caller who
    authenticates on the way in.

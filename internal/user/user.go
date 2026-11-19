@@ -13,6 +13,13 @@ import (
 	"github.com/google/uuid"
 )
 
+// PreferredSixel values. A caller's setting forces sixel graphics on or off
+// whatever the connect probe found; empty uses the probe's answer.
+const (
+	SixelOn  = "on"
+	SixelOff = "off"
+)
+
 // MaxLastLogins = 10 // Max number of last logins to store (Moved to manager.go)
 
 // LoginEvent holds information about a single login
@@ -43,15 +50,19 @@ type User struct {
 	// serialized.
 	persisted bool
 
-	ID             int       `json:"id"`           // Added User ID for ACS 'U' check
-	PasswordHash   string    `json:"passwordHash"` // Changed from []byte to string
-	Handle         string    `json:"handle"`
-	LegacyUsername string    `json:"username,omitempty"` // Migration only: used during load when Handle is absent; cleared on save
-	AccessLevel    int       `json:"accessLevel"`
-	Flags          string    `json:"flags"`                 // Added Flags string for ACS 'F' check (e.g., "XYZ")
-	PublicKeys     []string  `json:"publicKeys,omitempty"`  // OpenSSH authorized_keys lines authorized for WFC admin
-	WFCReadOnly    bool      `json:"wfcReadOnly,omitempty"` // WFC console may watch only: no kick, snoop, type-in or chat
-	LastLogin      time.Time `json:"lastLogin"`
+	ID             int      `json:"id"`           // Added User ID for ACS 'U' check
+	PasswordHash   string   `json:"passwordHash"` // Changed from []byte to string
+	Handle         string   `json:"handle"`
+	LegacyUsername string   `json:"username,omitempty"` // Migration only: used during load when Handle is absent; cleared on save
+	AccessLevel    int      `json:"accessLevel"`
+	Flags          string   `json:"flags"`                 // Added Flags string for ACS 'F' check (e.g., "XYZ")
+	PublicKeys     []string `json:"publicKeys,omitempty"`  // OpenSSH authorized_keys lines authorized for WFC admin
+	WFCReadOnly    bool     `json:"wfcReadOnly,omitempty"` // WFC console may watch only: no kick, snoop, type-in or chat
+	// TestAccount marks an account used for automated checks. Its logins
+	// write no caller history, are not counted or announced, and are hidden
+	// from Who's Online below sysop level. Set by the sysop in ./ue only.
+	TestAccount bool      `json:"testAccount,omitempty"`
+	LastLogin   time.Time `json:"lastLogin"`
 
 	// Roles are the admin roles the sysop has given this user, by name, as
 	// configs/roles.json defines them (internal/perm). Only a sysop sets
@@ -135,6 +146,7 @@ type User struct {
 	ScreenWidth       int    `json:"screenWidth,omitempty"`       // Detected/preferred terminal width (default 80)
 	ScreenHeight      int    `json:"screenHeight,omitempty"`      // Detected/preferred terminal height (default 25)
 	PreferredEncoding string `json:"preferredEncoding,omitempty"` // User's encoding preference: "utf8", "cp437", or "" (not set)
+	PreferredSixel    string `json:"preferredSixel,omitempty"`    // Sixel graphics: SixelOn, SixelOff, or "" to use what the terminal reports
 	MsgHdr            int    `json:"msgHdr,omitempty"`            // Selected message header style; valid values are whatever MSGHDR.<n>.ans templates the menu set ships (0 = unset)
 
 	// User Configuration Preferences
@@ -249,6 +261,7 @@ type CallRecord struct {
 	BaudRate       string        `json:"baudRate"`             // Static value for now
 	CallNumber     uint64        `json:"callNumber,omitempty"` // Overall call number
 	Invisible      bool          `json:"invisible,omitempty"`  // True if user was logged in invisibly
+	From           string        `json:"from,omitempty"`       // Place label from the caller's IP, e.g. "MO/US"
 }
 
 // MorePromptsOn reports whether u wants long output paused a screenful at a

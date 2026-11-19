@@ -18,6 +18,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -134,10 +135,11 @@ func runMailPoll(c *cmdCtx, args string) (*user.User, string, error) {
 		ctx, cancel := context.WithTimeout(c.s.Context(), mailPollDeadline(e.RootConfigPath, strings.Fields(args)))
 		done := make(chan struct{})
 		watched := make(chan struct{})
-		go func() {
+		safego.Go(safego.KindMailPoll, c.nodeNumber, func() {
 			defer close(watched)
+			safego.TestPoint(safego.KindMailPoll)
 			watchPollStopKey(getSessionIH(c.s), done, cancel)
-		}()
+		}, nil)
 		out := &crlfWriter{w: terminalWriterFunc(func(p []byte) {
 			_ = terminalio.WriteProcessedBytes(terminal, p, outputMode)
 		})}

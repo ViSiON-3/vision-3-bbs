@@ -14,6 +14,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/rlogin"
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/telnetclient"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 )
@@ -100,7 +101,8 @@ func relayRemoteSession(ctx *DoorCtx, conn net.Conn, remoteOut io.Reader, discon
 	relayDone := make(chan struct{})
 	defer close(relayDone)
 	defer ctx.watch.freeze()
-	go func() {
+	safego.Go(safego.KindDoorWatch, ctx.NodeNumber, func() {
+		safego.TestPoint(safego.KindDoorWatch)
 		select {
 		case <-ctx.watch.Ended():
 			slog.Info("ending remote door", "node", ctx.NodeNumber, "door", ctx.DoorName,
@@ -108,7 +110,7 @@ func relayRemoteSession(ctx *DoorCtx, conn net.Conn, remoteOut io.Reader, discon
 			closeConn()
 		case <-relayDone:
 		}
-	}()
+	}, closeConn)
 
 	if !deadline.IsZero() {
 		timer := time.AfterFunc(time.Until(deadline), func() {
@@ -138,8 +140,10 @@ func relayRemoteSession(ctx *DoorCtx, conn net.Conn, remoteOut io.Reader, discon
 	var left doorInputCopy // set by the input goroutine, for after inputDone
 	trailer := ctx.takeDoorEnterTrailer()
 
-	go func() {
+	safego.Go(safego.KindDoorIO, ctx.NodeNumber, func() {
 		defer close(inputDone)
+		defer ctx.endDoorIfPanicking()
+		safego.TestPoint(safego.KindDoorIO)
 		var err error
 		left, err = copyToRemote(conn, ctx.Session, readInterrupt, disconnectKey, disconnectEnabled, trailer)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrClosed) && !errors.Is(err, net.ErrClosed) {
@@ -154,16 +158,18 @@ func relayRemoteSession(ctx *DoorCtx, conn net.Conn, remoteOut io.Reader, discon
 		// The user hung up or the socket died; either way the output copy
 		// should stop waiting on a connection nobody is reading from.
 		closeConn()
-	}()
+	}, closeConn)
 
-	go func() {
+	safego.Go(safego.KindDoorIO, ctx.NodeNumber, func() {
 		defer close(outputDone)
+		defer ctx.endDoorIfPanicking()
+		safego.TestPoint(safego.KindDoorIO)
 		_, err := io.Copy(ctx.Session, remoteOut)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrClosed) && !errors.Is(err, net.ErrClosed) {
 			slog.Warn("error relaying remote door output to session",
 				"node", ctx.NodeNumber, "door", ctx.DoorName, "protocol", proto, "error", err)
 		}
-	}()
+	}, closeConn)
 
 	// The remote side ending is what normally finishes a door, so wait on the
 	// output copy and then tear the input copy down.

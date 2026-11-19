@@ -722,6 +722,10 @@ under Security Levels in `./config`, to silence it.
 - `editorAutocorrect` — Board default for the message editor's [autocorrect](messages/message-areas.md#autocorrect), which fixes common typos as callers type. Applies to message areas whose own `autocorrect` is left out, to private mail when `PRIVMAIL` leaves it out, and to the auto-signature editor. Callers can still turn it off for themselves (shipped and fallback: `false`)
 - `customPromptACS` — [ACS](reference/acs.md) for setting your own [menu prompt](users/user-management.md#user-configuration-preferences) in User Konfig, and having a stored one shown. Blank or `*` is everyone; a string that doesn't parse lets nobody, as everywhere else, and the startup ACS check reports it. A caller who doesn't pass sees the menu's prompt and no Menu Prompt item, and keeps whatever they had stored (shipped and fallback: blank, everyone)
 
+**Caller location:**
+
+- `geoipPath` — Path to a MaxMind-format city database, such as DB-IP's free [IP to City Lite](https://db-ip.com/db/download/ip-to-city-lite) `.mmdb` (CC BY 4.0). Each call record then stores where the caller's IP is: `MO/US` for a US state, the country code elsewhere. Private and 100.64.0.0/10 addresses show `LAN` with or without a database. Empty turns lookups off. Read at startup.
+
 **IP Blocklist/Allowlist:**
 
 - `ipBlocklistPath` — Path to blocklist file (empty = disabled)
@@ -1352,14 +1356,8 @@ templates, menus and colours together. The board runs the theme named by
   board keeps running the theme it started with, art, menus and colours
   alike, until you restart it.
 
-To add a theme, copy a set and select it:
-
-```bash
-cp -R menus/v3 menus/mytheme
-```
-
-Then choose it under **Theme → Theme Selection** in `./config` (or set
-`theme.name`), run `./vision3 doctor`, and restart the BBS.
+To install a theme, check it, or start one of your own, see
+[Adding a Theme](configuration/adding-a-theme.md).
 
 ### Callers' Own Themes
 
@@ -1378,15 +1376,24 @@ is the default, for a caller who hasn't picked one.
   screen; their choice is kept, and comes back if you turn the setting on
   again. The change applies without a restart.
 - **What callers can pick.** Every directory under `menus/` with a valid
-  name and a `mnu/MAIN.MNU`, the board's own among them. With only one, the
+  name, a `mnu/MAIN.MNU`, and a `theme.json` that loads or none at all, the
+  board's own among them. With only one, the
   Theme item shows it and says there is nothing else to choose. To offer a
   theme, install it under `menus/`, with any changes of your own in
   `menus.d/<name>/` as for the board's theme; to stop offering one, remove
-  it.
+  it. A theme copied into `menus/` while the board runs is offered the next
+  time a caller opens the Theme box, without a restart.
+- **How themes are listed.** By name, with a line describing the
+  highlighted theme, from the theme's `theme.json` or the board's
+  `theme.labels`; a caller's choice is saved as the directory. See
+  [Name and description](configuration/adding-a-theme.md#name-and-description).
 - **When it applies.** A caller's theme takes over after they log in: their
-  menus, art, templates, BAR files and `theme.json` colours, and the message
+  menus, art, templates, BAR files, `theme.json` colours and
+  [`strings.json`](#theme-strings), and the message
   editor and V3 scripts they run. Everything before login (the login and new
-  user screens, the matrix) is always the board's theme. Choosing a theme
+  user screens) is always the board's theme, except the connection check and
+  the login matrix, which no theme changes (see
+  [Pre-login screens](configuration/adding-a-theme.md#pre-login-screens)). Choosing a theme
   in Konfig redraws Konfig in it straight away, and every screen after.
   If the new theme doesn't have the menu the caller was on, they go to its
   `MAIN`.
@@ -1405,6 +1412,58 @@ is the default, for a caller who hasn't picked one.
 - **Limits.** Toasts and split-screen sysop chat use the board's theme. An
   edit to a caller's theme's `theme.json` reaches them when they next log in
   or pick another theme; the board's own theme reloads straight away, as before.
+
+### Theme Strings
+
+A theme can carry its own prompts and messages, so its wording matches its
+look. Put a `strings.json` in the theme's directory, beside `theme.json`,
+holding only the strings the theme words differently:
+
+```json
+{
+  "execLoginCancelled": "\r\n|12Connection closed.|07\r\n",
+  "pauseString": "|08[|15more|08]|07"
+}
+```
+
+- **What it holds.** The same keys as `configs/strings.json` (see the
+  [String Editor](advanced/string-editor.md)). A key the theme's file
+  leaves out is the board's: `configs/strings.json`, else the shipped text.
+  A theme with no `strings.json` prints the board's strings throughout.
+- **Who sees it.** The board's theme's file applies to every screen it
+  draws, the ones before login among them (login, new user), but not the
+  login matrix, which `prelogin/strings.json` words. A
+  caller on their own theme reads that theme's file from login on, and a
+  caller who picks another theme in Konfig reads the new theme's from the
+  next screen. The message editor uses the session's theme's strings too.
+- **Your changes go in `menus.d/<theme>/strings.json`.** As with
+  `theme.json`, the overlay's file is merged over the theme's key by key:
+  the overlay holds only the keys you change, and each one wins over the
+  theme's own value; the rest still come from `menus/<theme>/strings.json`,
+  so an upgrade of the theme reaches them. The order, last wins:
+  shipped strings, `configs/strings.json`, `menus/<theme>/strings.json`,
+  `menus.d/<theme>/strings.json`.
+- **Editing.** `./strings --theme <name>` opens the theme's overlay file,
+  and `./strings --theme <name> --no-overlay` the theme's own. For each key
+  the file leaves out the editor shows what prints instead (for the overlay,
+  the theme's own value, else the board's). F4 removes a key from the file
+  being edited only, and a save leaves out every value that prints the
+  same as what the editor shows beneath it. With `--no-overlay` the editor
+  shows the theme's own file over the board's: a key the overlay sets still
+  wins for callers, whatever the theme's own file holds. The colour preview draws the theme as
+  its callers see it: with `theme.colors` only for the board's own theme.
+- **A string that doesn't fit its call site.** A value whose `%` directives
+  don't match what the BBS passes it is skipped with a log warning
+  (`theme string does not match the arguments the BBS passes it`), and the
+  value beneath it prints until it is corrected: for the overlay's, the
+  theme's own value, else the board's. A `strings.json` that doesn't
+  parse is logged and ignored: at startup or for a caller's theme the board's
+  strings print; on a reload of the board's theme the strings loaded before
+  stay.
+- **Reloading.** An edit to the board's theme's `strings.json`, in either
+  layer, applies without a restart, as `configs/strings.json` does. An edit
+  to another theme's reaches its callers when they next log in or pick a
+  theme.
 
 ### Board Colour Overrides
 
@@ -1776,6 +1835,7 @@ Additional structured attributes (node, user, error, etc.) vary by event.
 ```bash
 ./vision3 doctor [--json] [--fix [--dry-run]]
 ./vision3 --doctor [--json] [--fix [--dry-run]]
+./vision3 doctor [--json] --theme <name|directory>
 ```
 
 | Flag | Meaning |
@@ -1784,9 +1844,12 @@ Additional structured attributes (node, user, error, etc.) vary by event.
 | `--json` | Write the report as indented JSON on standard output instead of the text report |
 | `--fix` | Create the standard data directories (`data/users`, `data/logs`, `data/msgbases`, `data/files`) that are missing, mode `0750`. Requires `--doctor` |
 | `--dry-run` | List what `--fix` would create without creating it. Requires `--fix` |
+| `--theme` | Check one theme, `menus/<name>` or a directory, in place of the board, and list what `menus/v3` has that it lacks. See [Adding a Theme](configuration/adding-a-theme.md#checking-a-theme). Requires `--doctor`; not with `--fix` |
 
 Exit codes: `0` clean, `1` at least one `WARN`, `2` at least one `FAIL` (or
-invalid flags: `--fix` without `--doctor`, `--dry-run` without `--fix`). The
+invalid flags: `--fix` without `--doctor`, `--dry-run` without `--fix`,
+`--theme` without `--doctor` or with `--fix`, or a `--theme` that names no
+theme or directory). The
 exit-code table and the shape of the `--json` document are in the
 [Technical Reference](reference/technical.md#board-diagnostics-doctor).
 

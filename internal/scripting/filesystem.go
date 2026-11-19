@@ -189,8 +189,15 @@ func registerFS(v3 *goja.Object, eng *Engine) {
 	jsutil.Set(v3, "fs", obj)
 }
 
-// sandboxRoot returns the scripts/data/ directory for the current script config.
+// sandboxRoot returns the data directory for the current script config:
+// cfg.DataDir when set, otherwise scripts/data/ as resolveDataDir finds it.
 func sandboxRoot(cfg ScriptConfig) string {
+	if cfg.DataDir != "" {
+		if abs, err := filepath.Abs(cfg.DataDir); err == nil {
+			return abs
+		}
+		return cfg.DataDir
+	}
 	return resolveDataDir(cfg.WorkingDir)
 }
 

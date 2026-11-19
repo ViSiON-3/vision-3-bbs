@@ -13,6 +13,7 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
 
@@ -269,13 +270,14 @@ func wfcAdminSubsystem(sess ssh.Session) {
 	}
 	// The watcher reads the user record; it must not outlive the session.
 	watchDone := make(chan struct{})
-	go func() {
+	safego.Go(safego.KindWFC, sess, func() {
 		defer close(watchDone)
+		safego.TestPoint(safego.KindWFC)
 		watchAdminAuthorization(ctx, handle, wfcReauthInterval, refusal, func(reason string) {
 			slog.Warn("wfc-admin: session revoked, disconnecting", "user", handle, "addr", sess.RemoteAddr(), "reason", reason)
 			_ = sess.Close() // unblocks ServeRPC's read loop
 		})
-	}()
+	}, func() { _ = sess.Close() })
 	defer func() {
 		cancel()
 		<-watchDone

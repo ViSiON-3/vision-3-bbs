@@ -47,7 +47,7 @@ Press Enter on any user to open the field editor. It lays the fields out in two 
 
 **Left column:** Handle, Real Name, Access Level, Total Calls, Group/Location, Access Flags, Private Note, File Points, Custom Prompt, Time Limit, Password, WFC Keys
 
-**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted (read-only), Roles/Groups, Named Flags, WFC Read Only, ACS Test
+**Right column:** Validated, Hot Keys, More Prompts, Screen Width, Screen Height, Encoding, Msg Header, Output Mode, Deleted (read-only), Roles/Groups, Named Flags, Test Account, WFC Read Only, ACS Test
 
 **Read-only block:** Num Uploads, Msgs Posted, InfoForms, Auto Purge, Created, Updated, Last Login, Bulletin
 
@@ -60,6 +60,8 @@ Changing a Handle to one that matches the board's [bad user names](users/user-ma
 The Password field opens a dialog — new password is bcrypt-hashed before saving.
 
 WFC Keys opens a list of the account's SSH public keys, shown by SHA256 fingerprint and comment, with `[A]dd` and `[D]elete`. Keys are validated before they are saved; see [WFC Sysop Console](how-to-guides/wfc-console.md#enabling-access-for-a-sysop).
+
+Test Account (Y/N) marks an account used for automated checks: its logins write nothing to the caller history and are not counted, announced or shown online below sysop level. See [Test Accounts](users/user-management.md#test-accounts).
 
 WFC Read Only (Y/N) limits the account's [WFC console](how-to-guides/wfc-console.md#read-only-accounts) to watching: the BBS refuses its kick, snoop, type-in and chat.
 
@@ -251,6 +253,7 @@ found or cannot be loaded.
 | Deleted | `deletedUser` / `deletedAt` | Read-only; set by F2 |
 | Roles/Groups | `roles`, `expiringRoles` / `groups` | Dialog; checked against `roles.json`. A role with an expiry is in `expiringRoles` |
 | Named Flags | `namedFlags` | Dialog; each flag's expiry as RFC 3339, `""` for none; checked against `roles.json` |
+| Test Account | `testAccount` | |
 | WFC Read Only | `wfcReadOnly` | |
 
 The full record is described in

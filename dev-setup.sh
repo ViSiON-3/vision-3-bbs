@@ -144,6 +144,12 @@ for f in "$REPO_DIR"/templates/configs/*.json; do
     [[ -f "$f" ]] || continue
     [[ "$(basename "$f")" == "strings.json" ]] && continue
     dst="$TARGET/configs/$(basename "$f")"
+    # A board on the Reddit gateway's reddit.json keeps reading it until the
+    # sysop writes sources.json; a template sources.json would replace it.
+    if [[ "$(basename "$f")" == "sources.json" && -f "$TARGET/configs/reddit.json" ]]; then
+        echo "  sources.json skipped: this board still uses reddit.json."
+        continue
+    fi
     if [[ ! -f "$dst" ]]; then
         echo "  Creating $(basename "$f") from template..."
         cp "$f" "$dst"

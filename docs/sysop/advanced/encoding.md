@@ -12,28 +12,37 @@ one in their own settings.
 
 ## How a Session's Encoding Is Chosen
 
-1. **The terminal type is a first guess.** Terminals that announce
-   themselves as `syncterm`, `sync`, `magiterm`, `netrunner`,
-   `ansi-256color-rgb`, `ansi`, `ansi-bbs`, `scoansi` or `vt100*` are
-   treated as CP437; anything else is treated as UTF-8. (An SSH session
-   reporting `xterm` with more than 80 columns is also taken for NetRunner,
-   which identified itself that way in older builds.)
-2. **The terminal is then asked.** At connect the board draws a box-drawing
-   character, which is three bytes in UTF-8, and sends a cursor-position
-   query. A terminal that decodes UTF-8 reports the cursor one cell on; a
-   single-byte terminal reports three. The answer overrides the guess. With
-   no answer within 750 ms the guess stands, so a terminal that does not
-   respond costs nothing more than that wait, once. Telnet and SSH share the
-   probe; anything the caller typed during it is dropped.
+1. **The terminal is asked.** In `auto` mode, on a connection with a PTY
+   (every telnet connection; an SSH connection whose client asks for one),
+   the board saves the cursor, draws `⌂` at the start of row 2, which is
+   three bytes in UTF-8, and sends a cursor-position query. A terminal that
+   decodes UTF-8 moves the cursor one column; that means UTF-8. Two or three
+   columns mean CP437. The row is then erased and the cursor restored. The
+   terminal's announced type plays no part. An SSH connection without a PTY
+   gets UTF-8 and is not probed.
+2. **Silence means CP437.** With no answer within 750 ms, or an answer that
+   is malformed or shows any other movement, the session is CP437, which
+   keeps plain text readable on either kind of terminal. A terminal that
+   does not respond costs nothing more than that wait, once. Telnet and SSH
+   share the probe; anything the caller typed during it is dropped. A reply
+   that comes after the wait does not change the encoding, and is taken out
+   of the input while one is still expected, which is until the first one
+   comes or 30 s after connect. A report later than that reaches the input
+   as typed bytes, as does one whose bytes arrive more than 2 s apart: the
+   start of a report looks like the start of a key, so it is held only that
+   long before it goes on as typed.
 3. **A saved preference wins.** A caller who has pinned UTF-8 or CP437 in
    **K** (see below) gets that encoding regardless of what was detected.
    Everyone else is on Auto and gets a fresh detection every call, so one
    account used from SyncTERM at home and a Linux terminal at work is right
    in both.
 
-The chosen encoding is logged at connect (`auto mode selecting CP437 for
-retro BBS terminal`, `encoding probe overrides terminal type guess`, and so
-on), which is the first place to look when a caller reports garbled art.
+Each connection with a PTY logs the probe's replies and the result on one
+line, `terminal probe cursor=… encoding=…`, with control bytes escaped and
+`none` where the terminal sent nothing (`encoding=not probed` when the
+encoding is forced). Every connection then logs `output mode at connect`; a
+connection without a PTY has only that line. That is the first place to look
+when a caller reports garbled art.
 
 ## The Caller's Encoding Setting
 
@@ -59,7 +68,9 @@ off.
 ## Forcing an Encoding for the Whole Board
 
 `./vision3 --output-mode=utf8` or `--output-mode=cp437` starts every session
-in that encoding and skips the connect-time probe. It exists for testing and
+in that encoding and skips the connect-time encoding probe. The device
+attributes queries that decide sixel graphics are still sent, so a terminal
+that does not answer them still costs up to 750 ms at connect. It exists for testing and
 for a board that is only ever reached from one kind of client. The default,
 `auto`, is described above.
 
@@ -74,13 +85,14 @@ session, the caller's preference must be Auto.
 |---------|-------|------------|
 | Box drawing shows as accented letters (`ÚÄÄ¿`) in a modern terminal | The session is on CP437 | Have the caller open **K** and check **Encoding**; a saved `CP437` overrides detection. Set it back to Auto |
 | Art shows `â”€â”€` or question marks in SyncTERM or NetRunner | The session is on UTF-8 | Same check; a saved `UTF-8` is the usual cause. SyncTERM should be in its CP437 mode |
-| Right on one client, wrong on another, same account | A pinned encoding | Set **Encoding** to Auto so each call is detected |
+| Box drawing is wrong in a modern terminal that does not answer cursor queries | Silence means CP437 | The caller pins **Encoding** to UTF-8 in **K**; it applies from login |
+| Right on one client, wrong on another, same account | A pinned encoding, or one client does not answer the probe | If both clients answer the probe, set **Encoding** to Auto so each call is detected. If one is silent it gets CP437 on Auto; a pinned encoding applies to the whole account, on every client, so pin the one that suits the client used most |
 | Everything is wrong for every caller | `--output-mode` is forced | Start the BBS without the flag |
 | Right until login, then wrong | A pinned encoding overriding `--output-mode` | Set that caller's **Encoding** to Auto |
 
-An unanswered probe is logged as `encoding probe got no answer, keeping
-terminal type guess`; a terminal that never answers keeps working on its
-terminal-type guess.
+An unanswered probe is logged as `terminal probe cursor=none
+encoding=cp437`. Screens before login use the probe's answer; a caller's
+pinned encoding applies from login.
 
 ## Technical Reference
 
@@ -113,9 +125,11 @@ invariants the output path keeps so that both encodings stay correct.
   - UTF-8 mode converts raw CP437 high bytes to UTF-8 when needed while preserving ANSI escapes.
   - **Rune-by-rune decoding**: Preserves valid UTF-8 while mapping invalid bytes to CP437.
   - Handles mixed encoding content correctly without corruption.
-- `internal/menu/encoding_probe.go` — `ProbeSessionEncoding` draws the glyph,
-  reads the cursor report (`ansi.ParseCPR`) and maps the column to an
-  encoding (`ansi.EncodingFromProbeColumn`). `cmd/vision3/encoding.go` holds
+- `internal/menu/terminal_probe.go` — `ProbeTerminal` draws the glyph and
+  takes the cursor report through the session's reply trap
+  (`editor.ReplyTrap.ExpectCursorReport`), then `encodingFromReport` maps it
+  (`ansi.ParseCPR`, `ansi.EncodingFromProbeColumn`), CP437 on silence. The same write carries the
+  device attributes queries that decide sixel graphics. `cmd/vision3/encoding.go` holds
   the 750 ms timeout and the connect/login precedence.
 - `internal/menu/user_konfig.go` — `toggleEncoding` is the **K** Encoding
   cycle; its text comes from the `konfigEncoding*` strings.

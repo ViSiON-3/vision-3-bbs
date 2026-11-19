@@ -21,7 +21,7 @@ func sysFieldsBotDefense(cfg *config.ServerConfig) []fieldDef {
 			Set: func(val string) error { cfg.EnableChallengeGate = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Gate Art File", Help: "ANSI/ASCII file in the menu ansi dir", Type: ftString, Col: 3, Row: 2, Width: 20,
+			Label: "Gate Art File", Help: "ANSI/ASCII file in prelogin/ansi, else menus/v3/ansi", Type: ftString, Col: 3, Row: 2, Width: 20,
 			Get: func() string { return cfg.ChallengeGateFile },
 			Set: func(val string) error { cfg.ChallengeGateFile = val; return nil },
 		},

@@ -7,6 +7,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/admin"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/scheduler"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -20,7 +21,7 @@ import (
 // recorded in the history plus callers who are still online (their record
 // is only written at disconnect). The history keeps a bounded number of
 // records, so on a very busy board the count is a floor, not an exact
-// figure.
+// figure. A test login is not a call and is not counted.
 func countCallsToday(records []user.CallRecord, active []*session.BbsSession, now time.Time) int {
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	n := 0
@@ -31,7 +32,7 @@ func countCallsToday(records []user.CallRecord, active []*session.BbsSession, no
 	}
 	for _, s := range active {
 		s.Mutex.RLock()
-		loggedIn := s.User != nil && !s.StartTime.Before(midnight)
+		loggedIn := s.User != nil && !s.TestLogin && !s.StartTime.Before(midnight)
 		s.Mutex.RUnlock()
 		if loggedIn {
 			n++
@@ -185,10 +186,11 @@ func kickNode(reg *session.SessionRegistry, nodeID int, connectedAt time.Time) e
 	// From here on only ch (the selected session's own channel) is touched,
 	// so a slot reuse after the check above cannot redirect the close.
 	written := make(chan struct{})
-	go func() {
+	safego.Go(safego.KindWFC, nodeID, func() {
 		defer close(written)
+		safego.TestPoint(safego.KindWFC)
 		_, _ = ch.Write([]byte("\r\n\r\nYou have been disconnected by the SysOp.\r\n")) // best-effort notice
-	}()
+	}, nil)
 	select {
 	case <-written:
 	case <-time.After(kickNoticeTimeout):

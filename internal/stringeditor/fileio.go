@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
+	"path/filepath"
 	"sort"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 )
 
 // LoadStrings reads strings.json and returns its string values. A missing
@@ -33,13 +37,34 @@ func loadStringsFile(path string) (values map[string]string, extra map[string]js
 	}
 	for k, v := range raw {
 		var s string
-		if json.Unmarshal(v, &s) == nil {
+		// A null is an unset key to the BBS, so it is not a value here
+		// either; it is kept with the other entries and written back.
+		if string(bytes.TrimSpace(v)) != "null" && json.Unmarshal(v, &s) == nil {
 			values[k] = s
 		} else {
 			extra[k] = v
 		}
 	}
 	return values, extra, nil
+}
+
+// InheritedStrings returns what the BBS prints for each key the strings.json
+// files at paths set, the later files' keys over the earlier ones': for a
+// theme's file, the board's configs/strings.json, then for the theme's
+// overlay file, the theme's own. Each file is read as the BBS reads a
+// theme's (config.ReadStringsLayer), so a value the BBS skips for a format
+// mismatch is skipped here too and the one beneath it shows. A missing file
+// sets none.
+func InheritedStrings(paths ...string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, path := range paths {
+		values, _, err := config.ReadStringsLayer(path)
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(out, values)
+	}
+	return out, nil
 }
 
 // SaveStrings writes the string map back to the JSON file with sorted keys and
@@ -81,6 +106,10 @@ func saveStringsFile(path string, values map[string]string, extra map[string]jso
 		return fmt.Errorf("encoding strings: %w", err)
 	}
 
+	// A theme's overlay directory may not exist yet.
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating %s: %w", filepath.Dir(path), err)
+	}
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("writing %s: %w", path, err)
 	}

@@ -84,8 +84,9 @@ The config editor saves `config.json`, `conferences.json`, `file_areas.json`, `f
 | `--json` | Write the report as JSON (checks, summary, fixes) |
 | `--fix` | Create the standard data directories that are missing. Nothing else is changed |
 | `--dry-run` | With `--fix`: list the directories it would create without creating them |
+| `--theme <name\|dir>` | Check one theme in place of the board and compare it with `menus/v3` (`cmd/vision3/theme_check.go`) |
 
-Exit codes: `0` no findings, `1` warnings only, `2` at least one failure, or the report could not be written. `--fix` without `--doctor`, or `--dry-run` without `--fix`, also exits `2`.
+Exit codes: `0` no findings, `1` warnings only, `2` at least one failure, or the report could not be written. `--fix` without `--doctor`, `--dry-run` without `--fix`, `--theme` without `--doctor` or with `--fix`, and a `--theme` that names no theme or directory also exit `2`.
 
 The checks cover `configs/*.json` parsing with line and column, unknown keys in `config.json` and `ftn.json`, data, log and message-base paths and permissions, area and conference references, duplicate tags and base paths, message and file echo routing, TIC authentication, FTN addresses, links, passwords and paths against `binkd.conf`, QWKnet and V3Net settings and the V3Net identity key, sysop and default credentials, ACS levels, signup settings, InfoForms, IP lists and secret-file permissions, the bad-name list, menu files and their `GOTO`/`RUN`/`DOOR` references, and configured door scripts and executables.
 

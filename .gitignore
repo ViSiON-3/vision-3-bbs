@@ -42,6 +42,10 @@ go.work.sum
 /menus.d/*
 !/menus.d/README.md
 
+# The board's pre-login screens (connection check, login matrix), read before
+# the shipped stock files. Never tracked.
+/prelogin/
+
 # Compiled executable
 /vision3
 /cmd/vision3/vision3

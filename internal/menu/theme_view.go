@@ -17,7 +17,8 @@ import (
 // (#1099). Their session then runs on a view of the board's executor: the
 // same managers, config and registries, read through the board so a
 // reload reaches it, with the chosen theme's menus, art, templates, BAR
-// files and colours. Screens before login stay on the board's theme.
+// files, colours and strings.json. Screens before login stay on the
+// board's theme.
 
 // ForTheme is the theme choice this executor was made for by ForUser: ""
 // for the board's own.
@@ -93,7 +94,8 @@ func checkCallerTheme(dir string) error {
 
 // newView makes a caller's view of the board e for the theme choice
 // forTheme: on the theme at dir, or on the board's own theme when theme is
-// nil. Every field but the theme's is the board's.
+// nil. Every field but the theme's is the board's. A view on its own
+// theme has that theme's strings.json over the board's strings.
 func (e *MenuExecutor) newView(forTheme, dir string, theme *config.ThemeConfig) *MenuExecutor {
 	v := &MenuExecutor{
 		ConfigPath:      e.ConfigPath,
@@ -123,6 +125,7 @@ func (e *MenuExecutor) newView(forTheme, dir string, theme *config.ThemeConfig) 
 	}
 	v.MenuSetPath = dir
 	v.SetTheme(*theme)
+	v.ReloadThemeStrings()
 	return v
 }
 
@@ -149,11 +152,16 @@ func (e *MenuExecutor) SwitchTheme(u *user.User, menuName string) (next *MenuExe
 	return next, menuName, true
 }
 
-// withSessionTheme gives the message editor the menu set and theme of a
-// session on a caller's own theme. On the board's theme it leaves ctx
-// alone, and the editor reads the theme the server runs.
+// withSessionTheme gives the message editor the session's strings, and
+// the menu set and theme of a session on a caller's own theme. On the
+// board's theme it leaves those two alone, and the editor reads the theme
+// the server runs.
 func withSessionTheme(e *MenuExecutor, ctx editor.EditorContext) editor.EditorContext {
-	if e == nil || e.parent == nil || e.sharesTheme {
+	if e == nil {
+		return ctx
+	}
+	ctx.Strings = e.Strings()
+	if e.parent == nil || e.sharesTheme {
 		return ctx
 	}
 	ctx.MenuSetPath = e.MenuSetPath

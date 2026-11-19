@@ -213,3 +213,31 @@ func TestCallerRoleFields(t *testing.T) {
 		seenTheme[tf], seenBoard[bf] = true, true
 	}
 }
+
+// The strings editor's preview for a theme: the board's theme.colors apply
+// to the board's own theme only, as they do for callers.
+func TestThemeColorSlotCodes(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "configs")
+	amber := filepath.Join(root, "menus", "amber")
+	v3 := filepath.Join(root, "menus", "v3")
+	for name, body := range map[string]string{
+		filepath.Join(configDir, "config.json"): `{"theme": {"name": "amber", "colors": {"callerInput": 13}}}`,
+		filepath.Join(amber, "theme.json"):      `{"callerStat": 10}`,
+		filepath.Join(v3, "theme.json"):         `{"callerStat": 9}`,
+	} {
+		if err := os.MkdirAll(filepath.Dir(name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(name, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := ThemeColorSlotCodes(root, configDir, "", amber); got != BoardColorSlotCodes(root, configDir, "", amber) || got[1] != "|13" {
+		t.Errorf("board's theme = %q, want the board's codes with its override |13", got)
+	}
+	got := ThemeColorSlotCodes(root, configDir, "", v3)
+	if got[1] == "|13" || got[3] != "|09" {
+		t.Errorf("other theme = %q, want v3 as it ships: no |13 override, stat |09", got)
+	}
+}

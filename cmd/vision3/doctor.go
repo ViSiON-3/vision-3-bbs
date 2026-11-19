@@ -184,7 +184,7 @@ func printDoctorText(w io.Writer, report doctorReport) error {
 	}
 
 	sections := map[string][]doctorCheck{}
-	sectionOrder := []string{"BOARD FILES", "CONFIGURATION", "NETWORK & MESSAGING", "SECURITY", "MENUS & DOORS", "ACCESS CONTROL"}
+	sectionOrder := []string{"BOARD FILES", "CONFIGURATION", "NETWORK & MESSAGING", "SECURITY", "MENUS & DOORS", "THEME", "ACCESS CONTROL"}
 	for _, check := range report.Checks {
 		section := doctorSection(check.Name)
 		sections[section] = append(sections[section], check)
@@ -288,6 +288,8 @@ func fixDoctorDirectories(root string, dryRun bool) []doctorFix {
 func doctorSection(name string) string {
 	lower := strings.ToLower(name)
 	switch {
+	case strings.HasPrefix(lower, "theme ") && strings.Contains(lower, ": "):
+		return "THEME"
 	case strings.HasPrefix(lower, "acs: ") || lower == "acs strings" || lower == "admin roles":
 		return "ACCESS CONTROL"
 	case strings.Contains(lower, ".cfg") || strings.Contains(lower, ".mnu") || strings.HasPrefix(lower, "doors") || strings.HasPrefix(lower, "menus/"):
@@ -413,12 +415,17 @@ func inspectBoard(root string) doctorReport {
 		}
 	} else {
 		add("theme", doctorOK, fmt.Sprintf("%s (menus/%s)", themeName, themeName), "")
+		themeGapsNote(root, menuRoot, themeName, add)
+		if serverErr == nil {
+			checkThemeLabelTargets(root, serverCfg.Theme, add)
+		}
 		checkMenuFiles(menuRoot, configDir, add)
 		checkChatScreens(menuRoot, add)
 		checkThemeOverlay(menuRoot, add)
 		checkThemeOverlayColors(menuRoot, configDir, add)
 		checkRetiredScreenBars(menuRoot, add)
 	}
+	checkPrelogin(root, serverCfg, serverErr, add)
 	checkDoors(configDir, root, add)
 	checkACSStrings(root, add)
 	checkRoles(root, add)

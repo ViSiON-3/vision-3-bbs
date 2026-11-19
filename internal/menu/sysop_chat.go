@@ -18,6 +18,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 )
@@ -547,10 +548,16 @@ func runSysopChatOn(ih *editor.InputHandler, tap *snoop.Tap, w io.Writer, mode a
 	events := make(chan chatEvent)
 	stop := make(chan struct{})
 	fwdDone := make(chan struct{})
-	go func() {
+	safego.Go(safego.KindSysopChat, nil, func() {
 		defer close(fwdDone)
+		safego.TestPoint(safego.KindSysopChat)
 		forwardChatEvents(tap, tap.EndChat(), events, stop)
-	}()
+	}, func() {
+		select {
+		case events <- chatEvent{kind: chatEnd}:
+		case <-stop:
+		}
+	})
 	defer func() {
 		close(stop)
 		<-fwdDone

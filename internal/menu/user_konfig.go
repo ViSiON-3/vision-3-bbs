@@ -126,6 +126,9 @@ type konfigState struct {
 	// that take over the screen (the message editor, the header picker, the
 	// file-column box).
 	redraw bool
+	// place is where the editors draw while a script draws the screen;
+	// nil for the built-in form.
+	place *konfigPlace
 }
 
 func (st *konfigState) user() *user.User { return st.c.currentUser }
@@ -142,10 +145,27 @@ func (st *konfigState) width() int { return max(st.c.termWidth, konfigScreenCols
 
 // The footer rows, counted up from the foot of the screen as they sit on
 // the smallest one.
-func (st *konfigState) ruleRow() int   { return st.height() - (konfigMinHeight - konfigRuleRow) }
-func (st *konfigState) helpRow() int   { return st.ruleRow() + 1 }
-func (st *konfigState) editRow() int   { return st.helpRow() + 1 }
-func (st *konfigState) legendRow() int { return st.height() }
+func (st *konfigState) ruleRow() int     { return st.height() - (konfigMinHeight - konfigRuleRow) }
+func (st *konfigState) formHelpRow() int { return st.ruleRow() + 1 }
+func (st *konfigState) formEditRow() int { return st.formHelpRow() + 1 }
+func (st *konfigState) legendRow() int   { return st.height() }
+
+// helpRow and editRow are the rows for a setting's help and for an editor's
+// prompt and messages: the form's, or while a script draws the screen
+// those st.place gives, where 0 means none.
+func (st *konfigState) helpRow() int {
+	if st.place != nil {
+		return st.place.help
+	}
+	return st.formHelpRow()
+}
+
+func (st *konfigState) editRow() int {
+	if st.place != nil {
+		return st.place.prompt
+	}
+	return st.formEditRow()
+}
 
 // boxAt is where a box w columns wide and h rows tall goes: centred on the
 // screen.
@@ -163,6 +183,43 @@ func runUserKonfig(c *cmdCtx, args string) (*user.User, string, error) {
 	// Work on a copy of the context: edits update the size it carries.
 	ctx := *c
 	st := &konfigState{c: &ctx, ih: getSessionIH(c.s)}
+	st.layout()
+
+	hidden := c.e.hideCursorIfNeeded(c.terminal, c.outputMode, cursorHideContextDefault)
+	defer c.e.showCursorIfHidden(c.terminal, c.outputMode, hidden)
+
+	next := ""
+	if target := strings.TrimSpace(args); target != "" {
+		next = "GOTO:" + strings.ToUpper(target)
+	}
+	// Konfig is drawn as the caller's theme draws it, by its KONFIG.MNU
+	// script or else the built-in form, and switches between the two when
+	// the caller picks another theme in it.
+	for {
+		if rec := st.scriptedMenu(); rec != nil {
+			handled, err := st.runScripted(rec)
+			if err != nil {
+				return st.user(), "", err
+			}
+			if handled {
+				return st.user(), next, nil
+			}
+		}
+		done, err := st.runForm()
+		if err != nil {
+			return st.user(), "", err
+		}
+		if done {
+			return st.user(), next, nil
+		}
+	}
+}
+
+// layout lays out the settings the caller is offered, labelled in the
+// strings of the executor Konfig runs on, and keeps the selection on the
+// same setting when there is one.
+func (st *konfigState) layout() {
+	c := st.c
 	cols := konfigSections(c.e.Strings())
 	if !apiDevicesShown(c) {
 		cols = withoutKonfigItem(cols, qwkDevicesKonfigKey)
@@ -179,30 +236,38 @@ func runUserKonfig(c *cmdCtx, args string) (*user.User, string, error) {
 	if !themeKonfigOffered(c.e) {
 		cols = withoutKonfigItem(cols, themeKonfigKey)
 	}
-	st.items, st.headings = layoutKonfig(cols)
-
-	hidden := c.e.hideCursorIfNeeded(c.terminal, c.outputMode, cursorHideContextDefault)
-	defer c.e.showCursorIfHidden(c.terminal, c.outputMode, hidden)
-
-	next := ""
-	if target := strings.TrimSpace(args); target != "" {
-		next = "GOTO:" + strings.ToUpper(target)
+	var key byte
+	if st.sel < len(st.items) {
+		key = st.items[st.sel].key
 	}
+	st.items, st.headings = layoutKonfig(cols)
+	st.sel = 0
+	for i, it := range st.items {
+		if key != 0 && it.key == key {
+			st.sel = i
+		}
+	}
+}
 
+// runForm draws the built-in form and reads keys until the caller leaves,
+// when done is true, or picks a theme whose KONFIG.MNU names a script, when
+// done is false and that theme's script takes over.
+func (st *konfigState) runForm() (done bool, err error) {
 	if err := st.renderAll(); err != nil {
-		return st.user(), "", err
+		return false, err
 	}
 	for {
 		key, err := st.ih.ReadKey()
 		if err != nil {
-			return st.user(), "", err
+			return false, err
 		}
+		e := st.c.e
 		done, err := st.handleKey(key)
-		if err != nil {
-			return st.user(), "", err
+		if err != nil || done {
+			return done, err
 		}
-		if done {
-			return st.user(), next, nil
+		if st.c.e != e && st.scriptedMenu() != nil {
+			return false, nil
 		}
 	}
 }
@@ -339,10 +404,10 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					help:  str.KonfigEncodingHelp,
 					value: encodingValue,
 					edit:  toggleEncoding},
-				{key: 'D', label: str.KonfigHotKeysLabel, flips: true,
-					help:  str.KonfigHotKeysHelp,
-					value: func(st *konfigState) konfigValue { return st.onOffValue(st.user().HotKeys) },
-					edit:  toggleHotKeys},
+				{key: sixelKonfigKey, label: str.KonfigSixelLabel, flips: true,
+					help:  str.KonfigSixelHelp,
+					value: sixelValue,
+					edit:  toggleSixel},
 			}},
 			{title: str.KonfigSectionAppearance, items: []*konfigItem{
 				{key: themeKonfigKey, label: str.KonfigThemeLabel,
@@ -425,6 +490,12 @@ func konfigSections(str *config.StringsConfig) [2][]konfigSection {
 					help:  str.KonfigV3NetSharingHelp,
 					value: v3netSharingValue,
 					edit:  editV3NetSharing},
+				// Hot Keys sits here so Sixel Graphics fits in Terminal:
+				// the left column has no free row.
+				{key: 'D', label: str.KonfigHotKeysLabel, flips: true,
+					help:  str.KonfigHotKeysHelp,
+					value: func(st *konfigState) konfigValue { return st.onOffValue(st.user().HotKeys) },
+					edit:  toggleHotKeys},
 			}},
 		},
 	}
@@ -522,6 +593,20 @@ func (st *konfigState) effectiveListingMode() (mode string, chosen bool) {
 		return "classic", chosen
 	}
 	return "lightbar", chosen
+}
+
+// sessionSixel is what the terminal answered at connect, before the
+// caller's setting.
+func (st *konfigState) sessionSixel() bool { return sessionSixel(st.c.s, nil) }
+
+func sixelValue(st *konfigState) konfigValue {
+	switch st.user().PreferredSixel {
+	case user.SixelOn:
+		return st.onOffValue(true)
+	case user.SixelOff:
+		return st.onOffValue(false)
+	}
+	return konfigValue{fmt.Sprintf(st.c.e.Strings().KonfigAutoFormat, st.onOffValue(st.sessionSixel()).text), toneDim}
 }
 
 func listingModeValue(st *konfigState) konfigValue {
@@ -723,6 +808,41 @@ func toggleEncoding(st *konfigState) error {
 	default:
 		st.status = fmt.Sprintf(str.KonfigEncodingMismatch, encodingName(session), encodingName(next))
 	}
+	return nil
+}
+
+// sixelKonfigKey is Sixel Graphics' key in Konfig.
+const sixelKonfigKey = 'W'
+
+// toggleSixel cycles Auto, what the terminal answered at connect, the
+// opposite, and back to Auto, as toggleEncoding does, so the first press
+// never changes what the caller sees.
+func toggleSixel(st *konfigState) error {
+	session, other := user.SixelOff, user.SixelOn
+	if st.sessionSixel() {
+		session, other = user.SixelOn, user.SixelOff
+	}
+	old := st.user().PreferredSixel
+	var next string
+	switch old {
+	case session:
+		next = other
+	case other:
+		next = ""
+	default:
+		next = session
+	}
+	str := st.c.e.Strings()
+	if !st.commit(str.KonfigSixelLabel,
+		func(u *user.User) { u.PreferredSixel = next },
+		func(u *user.User) { u.PreferredSixel = old }) {
+		return nil
+	}
+	if next == "" {
+		st.status = str.KonfigSixelAuto
+		return nil
+	}
+	st.saved(str.KonfigSixelLabel, sixelValue(st).text)
 	return nil
 }
 
@@ -1011,6 +1131,13 @@ func editCustomPrompt(st *konfigState) error {
 	str := st.c.e.Strings()
 	label := str.KonfigCustomPromptLabel
 	old := st.user().CustomPrompt
+	// The preview needs a row of its own. A screen a script draws has none,
+	// so it is cleared and the editor uses the built-in form's rows.
+	if st.place != nil && st.helpRow() == 0 {
+		if err := st.promptOnClearScreen(); err != nil {
+			return err
+		}
+	}
 	ph := st.previewPlaceholders()
 	st.onEdit = func(text string) error { return st.previewCustomPrompt(text, ph) }
 	defer func() {
@@ -1056,7 +1183,7 @@ func (st *konfigState) previewPlaceholders() map[string]string {
 // with the placeholders ph, or the help line when it is blank.
 func (st *konfigState) previewCustomPrompt(text string, ph map[string]string) error {
 	text = user.CleanCustomPrompt(text)
-	if text == "" {
+	if text == "" || st.helpRow() == 0 {
 		return st.renderHelp()
 	}
 	shown := ansi.ConvertCP437ToUTF8(renderCustomPrompt(text, ph))

@@ -42,6 +42,8 @@ The stock main menu's `K` key opens the User Konfig editor (`RUN:USERCONFIG`). I
 
 Each change is saved as soon as the caller confirms it. The screen's header is `KONFIG.ANS` in the menu set. Keep it to 4 rows or fewer: the form starts on the row straight under it, so the stock art ends with a rule. A taller header is drawn over by the form. The form keeps to the top of the screen; its help line, status line and key legend sit at the foot of the caller's screen height, and the boxes some settings open are centred on it. The art can show the caller's details with tokens like `|UH` (handle) and `|LEVEL`. Its text (setting names, help lines, values and messages) is the `konfig*` strings in `strings.json`, under **Konfig:** in `./strings`. Setting names, section titles, values and prompts are plain text in fixed-width cells: longer text is cut to fit, and colour codes are not expanded there. Help lines and messages take pipe colour codes. See [User settings](reference/menu-commands.md#user-settings) for `USERCONFIG` and the `CFG_AUTOSIG`, `CFG_PASSWORD` and `CFG_FILECOLUMNS` shortcuts.
 
+For a scripted settings menu, add `mnu/KONFIG.MNU` to the theme, or its overlay, with a `SCRIPT` that names a script door or a theme script, as in `"SCRIPT": "submenu.js morph"` (see `v3.menu` and Theme scripts in the [scripting guide](../scripting/vpl-scripting.md)). It uses the same animated frame, title, and wireframe shape as the section menus, with two columns of settings and their current values. A setting's letter opens its editor at once; arrows move the highlight and Enter opens the highlighted setting; Q or Esc returns. Edits still save immediately, and passwords stay masked. The native form is used if the script is absent or fails. Without a `KONFIG.MNU` the native form is drawn with its `KONFIG.ANS` header. A caller who picks another theme in Konfig sees Konfig as that theme draws it from then on, scripted or the native form.
+
 ## Pipes in Names
 
 A new handle or real name cannot contain `|`, because screens print names through the pipe-code expander. Signup, `USERCONFIG`, the admin user editor, `./ue` and the scripting API all refuse one. A new handle also can't start with `@`, which addresses mail to a [user group](messages/private-mail.md#mail-to-a-group); an existing one keeps it.
@@ -551,6 +553,34 @@ the config editor (`invisibleLevel` in `configs/config.json`). Whatever the
 threshold, CoSysOps and above always see invisible sessions, and so does the
 [WFC console](how-to-guides/wfc-console.md).
 
+## Test Accounts
+
+An account used by automated checks can be marked as a test account, so its
+logins do not show up as calls. Set **Test Account** to `Y` in `./ue`, or set
+`"testAccount": true` on the record in `data/users/users.json`. Only the
+sysop can set it; no caller-facing screen changes it, and it needs no
+particular access level.
+
+A running board takes an edit made in `./ue` into memory the next time it
+saves `users.json`, which any login does. The account's first login after
+the edit can therefore still be recorded; set the flag while the board is
+stopped to avoid that.
+
+A test account's login:
+
+- writes no record to `callhistory.json`, so it is in no Last Callers list,
+  script or network feed, and does not advance the board's call counter;
+- is not counted in the WFC console's calls today;
+- is invisible: not announced to other nodes or V3Net, not in V3Net Who's
+  Online, and shown in Who's Online and the page list only to sysop-level
+  viewers (co-sysops do not see it);
+- is never asked the Invisible Logon question;
+- is still logged in the server log at logon and logoff, with the node,
+  handle and user ID and `testLogin=true`.
+
+The account's own `timesCalled` and last login still advance, and its posts,
+uploads and mail are recorded as for any caller.
+
 ## Security Considerations
 
 ### Password Storage
@@ -943,6 +973,7 @@ Users are stored as a JSON array. Each user account contains:
 - `validated` - Whether user is validated by SysOp
 - `publicKeys` - OpenSSH public keys that may open the [WFC console](how-to-guides/wfc-console.md) (omitted when empty)
 - `wfcReadOnly` - The account's WFC console may watch but not kick, snoop, type in or chat (omitted when false)
+- `testAccount` - A [test account](#test-accounts): its logins leave no caller history and are not counted or announced (omitted when false)
 
 ##### Statistics
 
@@ -971,7 +1002,7 @@ Users are stored as a JSON array. Each user account contains:
 
 - `screenWidth` - Preferred terminal width, 80–255 (0 = use detected PTY width). Screens are laid out for 80×25, so narrower widths are raised to 80
 - `screenHeight` - Preferred terminal height (0 = use detected PTY height)
-- `preferredEncoding` - `""` (Auto) detects the encoding on every call: the board draws one box-drawing character and asks the terminal where its cursor ended up, falling back to the terminal type when it gets no answer. `"utf8"` or `"cp437"` forces that encoding from the next login, on every terminal the caller uses.
+- `preferredEncoding` - `""` (Auto) keeps the encoding the connection got: with the board in `auto` output mode and a PTY (every telnet call; an SSH call whose client asks for one), the board draws one character and asks the terminal where its cursor ended up, and one column of movement is UTF-8 while anything else, including no answer, is CP437. Without a PTY the board uses UTF-8, and a forced `--output-mode` sets it for everyone. `"utf8"` or `"cp437"` forces that encoding from the next login, on every terminal the caller uses.
 - `msgHdr` - Selected message header style; valid values are whatever `MSGHDR.<n>.ans` templates the menu set ships (0 = unset, defaults to style 1)
 
 After authentication, the system applies these preferences: if a user's stored screen dimensions are smaller than the detected PTY size (or the PTY defaults to 80x25), the stored values cap the effective terminal dimensions. ANSI art is truncated to fit the effective height to prevent scrolling.

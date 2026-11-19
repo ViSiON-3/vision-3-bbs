@@ -84,15 +84,15 @@ func (e *MenuExecutor) AnnouncePost(um *user.UserMgr, sess *session.BbsSession, 
 }
 
 // announce sends msg to every other caller allowed to see it, and, when
-// allow is given, for whom it also says yes. An invisible caller is never
-// announced, and sessions still logging in are skipped: they were not here
+// allow is given, for whom it also says yes. An invisible caller or a test
+// login is never announced, and sessions still logging in are skipped: they were not here
 // for the news. These are live only and never queued for login.
 func (e *MenuExecutor) announce(from *session.BbsSession, u *user.User, msg string, allow func(viewer *session.BbsSession, vu *user.User) bool) {
 	if e.SessionRegistry == nil {
 		return
 	}
 	from.Mutex.RLock()
-	invisible, node := from.Invisible, from.NodeID
+	invisible, node := from.Invisible || from.TestLogin, from.NodeID
 	from.Mutex.RUnlock()
 	if invisible {
 		return

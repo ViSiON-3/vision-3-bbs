@@ -54,6 +54,14 @@ func registerUser(v3 *goja.Object, eng *Engine) {
 		return vm.ToValue(eng.providers.CurrentUser.NumDownloads)
 	}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
+	jsutil.DefineAccessor(obj, "uploadedBytes", vm.ToValue(func(call goja.FunctionCall) goja.Value {
+		return vm.ToValue(eng.providers.CurrentUser.UploadedBytes)
+	}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)
+
+	jsutil.DefineAccessor(obj, "downloadedBytes", vm.ToValue(func(call goja.FunctionCall) goja.Value {
+		return vm.ToValue(eng.providers.CurrentUser.DownloadedBytes)
+	}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)
+
 	jsutil.DefineAccessor(obj, "filePoints", vm.ToValue(func(call goja.FunctionCall) goja.Value {
 		return vm.ToValue(eng.providers.CurrentUser.FilePoints)
 	}), nil, goja.FLAG_FALSE, goja.FLAG_FALSE)

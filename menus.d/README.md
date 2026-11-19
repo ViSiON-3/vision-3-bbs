@@ -20,6 +20,7 @@ copying the rest of `ansi/`; every other file still comes from `menus/`.
   with `*` in its menu list). Run it with `--no-overlay` to edit `menus/`
   directly.
 - `theme.json` here is merged over the shipped one key by key: hold only the keys you change, and the rest follow the shipped file. It hot-reloads like the shipped one. `./vision3 doctor --fix` removes keys that only repeat the shipped values. It also moves the colours you set here into `config.json` `theme.colors`, where `./config` edits them.
+- `strings.json` here is merged over the theme's own `strings.json` key by key, and both over the board's `configs/strings.json`: each key you set here wins, except a value whose `%` directives don't match what the BBS passes it, which is skipped with a log warning so the theme's own value, else the board's, prints. `./strings --theme <name>` edits it. See [Theme Strings](../docs/sysop/configuration/configuration.md#theme-strings).
 - A lightbar menu's `.ANS`, `.BAR` and `.CFG` are drawn against each other.
   If you override one, check the others still line up; the BBS logs a warning
   when a lightbar menu's files come from different layers.

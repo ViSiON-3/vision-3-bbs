@@ -1,0 +1,28 @@
+{
+  "items": [
+    {
+      "id": "t3_aaa111",
+      "parent_id": "",
+      "title": "First post",
+      "author": "alice",
+      "posted_at": "2026-10-03T00:01:34Z",
+      "body": "",
+      "url": "https://www.reddit.com/r/bbs/comments/aaa111/first_post/",
+      "thread": "https://old.reddit.com/r/bbs/comments/aaa111/first_post/",
+      "link": "https://www.reddit.com/r/bbs/comments/aaa111/first_post/",
+      "marker": "2"
+    },
+    {
+      "id": "t3_bbb222",
+      "parent_id": "",
+      "title": "A link \u0026 more ☃",
+      "author": "bob",
+      "posted_at": "2026-10-02T00:13:20Z",
+      "body": "",
+      "url": "https://www.reddit.com/r/bbs/comments/bbb222/a_link/",
+      "thread": "https://old.reddit.com/r/bbs/comments/bbb222/a_link/",
+      "link": "https://example.com/page",
+      "marker": "0"
+    }
+  ]
+}

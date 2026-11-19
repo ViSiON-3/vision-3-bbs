@@ -1,0 +1,28 @@
+{
+  "name": "hackernews",
+  "description": "Hacker News external-link headlines, fetched directly from the public HTML listing",
+  "fetch": "http",
+  "threads": false,
+  "listing_url": "https://news.ycombinator.com/{feed}",
+  "target_pattern": "^(news|newest|best)$",
+  "page_origin": "https://news.ycombinator.com",
+  "content": "table#hnmain",
+  "listing": {
+    "item": "tr.athing:has(.titleline > a[href^=\"https://\"]), tr.athing:has(.titleline > a[href^=\"http://\"])",
+    "id_pattern": "^[0-9]+$",
+    "fields": {
+      "id": {"attr": "id"},
+      "title": {"sel": ".titleline > a", "text": true},
+      "body": {"sel": ".titleline > a", "html": true},
+      "url": {"sel": ".titleline > a", "attr": "href"},
+      "link": {"sel": ".titleline > a", "attr": "href"}
+    }
+  },
+  "message": {
+    "from": "Hacker News",
+    "msgid_suffix": "hackernews",
+    "kludge": "HACKERNEWS",
+    "footer": true,
+    "body_fallback": "link"
+  }
+}

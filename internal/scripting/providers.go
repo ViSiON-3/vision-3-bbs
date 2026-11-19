@@ -1,6 +1,8 @@
 package scripting
 
 import (
+	"time"
+
 	"github.com/ViSiON-3/vision-3-bbs/internal/file"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 	"github.com/ViSiON-3/vision-3-bbs/internal/session"
@@ -16,6 +18,7 @@ type Providers struct {
 	MessageMgr      *message.MessageManager
 	FileMgr         *file.FileManager
 	SessionRegistry *session.SessionRegistry
+	Oneliners       OnelinerStore
 	// CanDownload reports whether the caller may download from an area,
 	// by its download ACS. v3.file.read, members, readMember and mark need
 	// it; nil means no area is readable or markable.
@@ -24,4 +27,22 @@ type Providers struct {
 	// its list ACS. v3.file.areas, area, list, count, search and totalCount
 	// leave out the areas it refuses; nil means no area is visible.
 	CanList func(*file.FileArea) bool
+	// Menu is the menu a script draws in place of its screen, read as
+	// v3.menu; nil for any other script.
+	Menu *MenuView
+}
+
+// OnelinerView is one oneliner as the script sees it.
+type OnelinerView struct {
+	Text      string
+	Handle    string
+	Anonymous bool
+	PostedAt  time.Time
+}
+
+// OnelinerStore reads and appends oneliners for the v3.oneliners binding.
+// Recent returns the newest first, up to limit (0 or less means all).
+type OnelinerStore interface {
+	Recent(limit int) []OnelinerView
+	Add(handle, username, text string, anonymous bool) error
 }

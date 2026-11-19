@@ -71,18 +71,6 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 		return currentUser, "", nil
 	}
 
-	renderFastLoginScreen()
-
-	// Check for lightbar BAR file.
-	barPath := e.menuFile("bar", "FASTLOGN.BAR")
-	lightbarOptions, barLoadErr := loadLightbarOptions("FASTLOGN", e)
-	isLightbar := barLoadErr == nil && len(lightbarOptions) > 0
-	if barLoadErr != nil {
-		if _, statErr := os.Stat(barPath); statErr == nil {
-			slog.Warn("BAR file exists but failed to load", "node", nodeNumber, "error", barLoadErr)
-		}
-	}
-
 	// Dispatch command by key string against CFG commands.
 	dispatchCommand := func(keyStr string) (*user.User, string, error, bool) {
 		for _, cmd := range commands {
@@ -121,6 +109,56 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 			}
 		}
 		return nil, "", nil, false
+	}
+
+	// FASTLOGN.MNU's SCRIPT, when it names one, draws Fast Logon in place of
+	// its screen and answers with the caller's key, which is dispatched as
+	// a key pressed on the screen. The built-in screen is drawn when the
+	// script cannot run or its answer is no command the caller may use. The
+	// script is not run again, so one that answers without reading the
+	// caller cannot loop.
+	if fastlognMenu != nil {
+		permitted := func(acs string) bool {
+			return acs == "" || acs == "*" || checkACS(acs, currentUser, s, terminal, sessionStartTime)
+		}
+		offered, owners := fastLoginOffer(commands, permitted)
+		view := c.runState("FASTLOGN").menuView(fastlognMenu, offered)
+		choice, scripted, scriptErr := c.scriptedChoice("FASTLOGN", fastlognMenu, view)
+		if scriptErr != nil {
+			if errors.Is(scriptErr, io.EOF) {
+				return nil, "LOGOFF", io.EOF
+			}
+			if errors.Is(scriptErr, editor.ErrIdleTimeout) {
+				// Idle, or out of time (editor.ErrTimeLimit wraps it): the
+				// login sequence drops the error, so the notice is shown here.
+				e.handleSessionTimeout(s, terminal, outputMode, nodeNumber, c.termWidth, termHeight)
+				return currentUser, "LOGOFF", nil
+			}
+			return currentUser, "LOGOFF", scriptErr
+		}
+		if scripted {
+			// The key runs the entry it was shown for only if that entry
+			// still wins under the caller's access now; an ACS can depend on
+			// the time. Otherwise the built-in screen asks again.
+			_, now := fastLoginOffer(commands, permitted)
+			if i, ok := owners[choice]; ok && now[choice] == i {
+				if u, action, err, matched := dispatchCommand(choice); matched {
+					return u, action, err
+				}
+			}
+		}
+	}
+
+	renderFastLoginScreen()
+
+	// Check for lightbar BAR file.
+	barPath := e.menuFile("bar", "FASTLOGN.BAR")
+	lightbarOptions, barLoadErr := loadLightbarOptions("FASTLOGN", e)
+	isLightbar := barLoadErr == nil && len(lightbarOptions) > 0
+	if barLoadErr != nil {
+		if _, statErr := os.Stat(barPath); statErr == nil {
+			slog.Warn("BAR file exists but failed to load", "node", nodeNumber, "error", barLoadErr)
+		}
 	}
 
 	// Use session-scoped InputHandler so we share the single goroutine reading
@@ -236,4 +274,40 @@ func runFastLogin(c *cmdCtx, args string) (*user.User, string, error) {
 		e.showUndefinedMenuInput(terminal, outputMode, nodeNumber)
 		renderFastLoginScreen()
 	}
+}
+
+// fastLoginOffer returns the commands of a Fast Logon script's view: those
+// Fast Logon acts on that permitted allows by their ACS, each key given once,
+// to the first such entry in the CFG, which is the one dispatch runs for it.
+// owners maps each offered key, upper-cased, to its entry's index in
+// commands.
+func fastLoginOffer(commands []CommandRecord, permitted func(acs string) bool) (offered []CommandRecord, owners map[string]int) {
+	owners = map[string]int{}
+	for i, cmd := range commands {
+		if !fastLoginActsOn(cmd.Command) || !permitted(cmd.ACS) {
+			continue
+		}
+		var keys []string
+		for _, key := range strings.Fields(cmd.Keys) {
+			if _, taken := owners[strings.ToUpper(key)]; !taken {
+				owners[strings.ToUpper(key)] = i
+				keys = append(keys, key)
+			}
+		}
+		if len(keys) > 0 {
+			cmd.Keys = strings.Join(keys, " ")
+			offered = append(offered, cmd)
+		}
+	}
+	return offered, owners
+}
+
+// fastLoginActsOn reports whether command is one Fast Logon carries out:
+// the full login, a GOTO:, or a logoff.
+func fastLoginActsOn(command string) bool {
+	switch command {
+	case "RUN:FULL_LOGIN_SEQUENCE", "RUN:MAINLOGOFF", "LOGOFF", "RUN:IMMEDIATELOGOFF":
+		return true
+	}
+	return strings.HasPrefix(command, "GOTO:")
 }

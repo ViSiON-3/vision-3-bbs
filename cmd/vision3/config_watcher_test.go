@@ -435,7 +435,7 @@ func TestPollReloadsOnRemovalWhenAsked(t *testing.T) {
 }
 
 // TestWatcherWatchesOverlayTheme checks the constructor registers theme.json
-// in both the shipped set and its overlay.
+// and the theme's strings.json in both the shipped set and its overlay.
 func TestWatcherWatchesOverlayTheme(t *testing.T) {
 	root := t.TempDir()
 	menuSet := filepath.Join(root, "menus", "v3")
@@ -451,6 +451,12 @@ func TestWatcherWatchesOverlayTheme(t *testing.T) {
 	want := map[string]bool{
 		filepath.Join(menuSet, "theme.json"):               false,
 		filepath.Join(root, "menus.d", "v3", "theme.json"): true,
+		// The theme's strings.json, in either layer: removing one puts its
+		// keys back to the layer beneath (the theme's own file under the
+		// overlay, else configs/strings.json). TestBoardThemeStrings in
+		// internal/menu tests what the reload then prints.
+		filepath.Join(menuSet, "strings.json"):               true,
+		filepath.Join(root, "menus.d", "v3", "strings.json"): true,
 	}
 	for _, tg := range cw.targets {
 		if reloadOnRemove, ok := want[tg.path]; ok {

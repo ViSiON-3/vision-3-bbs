@@ -310,7 +310,7 @@ v3.console.getstr(5, { number: true });    // digits only
 
 `getnum()` with no `max` accepts up to ten digits. `getstr()` with no `maxlen` accepts 128 characters.
 
-**Typed characters are decoded for you.** Scripts always see Unicode strings, whatever the caller's terminal sends. On a CP437 terminal each typed byte is mapped to its Unicode character (`0xAB` becomes `½`), and on a UTF-8 terminal the bytes of one character are assembled into it even when they arrive in separate reads. The echo goes back in the caller's own encoding, `maxlen` counts characters rather than bytes, and backspace removes a whole character. A malformed UTF-8 sequence, or a CP437 byte with no Unicode equivalent, is dropped. `getkey()` returns `""` for an escape sequence it discards (arrow keys and the like) and on timeout or disconnect.
+**Typed characters are decoded for you.** Scripts always see Unicode strings, whatever the caller's terminal sends. On a CP437 terminal each typed byte is mapped to its Unicode character (`0xAB` becomes `½`), and on a UTF-8 terminal the bytes of one character are assembled into it even when they arrive in separate reads. The echo goes back in the caller's own encoding, `maxlen` counts characters rather than bytes, and backspace removes a whole character. A malformed UTF-8 sequence, or a CP437 byte with no Unicode equivalent, is dropped. `getkey()` returns the arrow keys as `"UP"`, `"DOWN"`, `"LEFT"` and `"RIGHT"`; `getstr()` ignores them. It returns `""` for any other escape sequence, which it discards, and on timeout or disconnect. When a terminal splits an escape sequence across packets, as SyncTERM over SSH does with the arrow keys, the rest is given a short grace to arrive so the sequence is read whole rather than as a bare Escape.
 
 #### Reading special keys
 
@@ -362,6 +362,7 @@ for (;;) {
 |----------|------|-------------|
 | `width` | number | Terminal width in columns |
 | `height` | number | Terminal height in rows |
+| `utf8` | boolean | Whether this session sends text as UTF-8. When false, use characters available in CP437. This describes the encoding, not which glyphs the caller's font contains. |
 
 ---
 
@@ -457,6 +458,113 @@ is ended by a disconnect or the time limit, leaves the prompt to the BBS. When a
 the BBS prints nothing more for the prompt, so the script should leave the cursor where the caller
 expects it, normally at the start of a new line.
 
+### Menus drawn by a script
+
+A menu can hand its whole screen to a script. Name a `v3_script` door in the menu's `.MNU`, and the
+BBS runs it where it would have shown the `.ANS` and the prompt:
+
+```json
+{ "TITLE": "Message Menu", "SCRIPT": "SUBMENU blue" }
+```
+
+The first word is the door's code in `doors.json`; the rest are added to the door's own `args`. To
+script every menu of a menu set at once, put the same value in the set's `theme.json` as
+`menuScript`. A `.MNU` with its own `SCRIPT` uses that one, and `"SCRIPT": "NONE"` keeps a menu on
+its `.ANS`. A menu set with a `menuScript` and the scripts it names is a theme: switching the set
+switches how every menu is drawn.
+
+A toast sent to the caller, or the time-left warning (given once per menu, from five minutes left),
+is shown over a menu drawn by a script (a `SCRIPT` or `menuScript` menu; not the built-in screens
+listed further down, whose scripts are not stopped for them) while the script waits for a key: the BBS stops the script at
+`getkey`, `readkey`, `yesno`, `noyes` or `pause`, shows the notice on its row, and runs the script
+again, which draws the screen anew. `getstr` and `getnum` are not stopped. Keys typed meanwhile go to
+the new run. The script starts over from its first statement, so anything it does before its key
+wait, such as a write to `v3.data`, is done again: keep such work safe to repeat. The new run knows
+nothing of the last one, so it highlights whatever the script highlights when it starts.
+
+#### Theme scripts
+
+A theme can carry its scripts and pictures in its own directory, with no `doors.json` entry. When
+the first word of `SCRIPT` (or of `menuScript`) ends in `.js`, in any case, it names a file in the
+theme's `scripts/` directory instead of a door code. Door codes cannot contain a dot, so the two
+never clash, and a `SCRIPT` that names a door code works as before.
+
+```
+menus/glass/
+├── theme.json          { "menuScript": "mainmenu.js" }
+├── mnu/MAIN.MNU        { "SCRIPT": "mainmenu.js blue" }
+├── scripts/
+│   └── mainmenu.js
+└── data/
+    ├── logo.png        v3.gfx.image("logo.png")
+    └── mainmenu.json   v3.data store, made by the BBS
+```
+
+- The name is a file name only: `sub/menu.js` and `../menu.js` are refused and the menu shows its
+  screen.
+- The script is looked up in the caller's theme, so two themes can each have a `mainmenu.js` and
+  each caller runs their own theme's.
+- The theme's `data/` is the script's data directory: `v3.gfx` and `v3.fs` read from it and
+  `v3.data` keeps its store there, in place of `scripts/data/`.
+- The menu-set overlay applies: `menus.d/<theme>/scripts/mainmenu.js` is run in place of
+  `menus/<theme>/scripts/mainmenu.js`. The data directory is the `data/` of the tree the script came
+  from, so a script in `menus.d/<theme>/scripts/` uses `menus.d/<theme>/data/`; copy the pictures it
+  needs there too.
+- The script runs as a `v3_script` door with no [run time limit](#run-time-limit), since a menu
+  waits on its caller for as long as they stay, and no access rule. The caller's idle timeout and
+  time limit still end it. A sysop who wants a run limit or an ACS on the script gives it a
+  `doors.json` entry and names the door code instead.
+
+The script sees `v3.prompt.kind` as `"menu"` and answers as a menu prompt script does (see
+[v3.prompt](#v3prompt)). It is also given the menu:
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `v3.menu.name` | string | The menu's name, such as `MSGMENU` |
+| `v3.menu.title` | string | The menu's `TITLE` |
+| `v3.menu.items` | array | The commands to show, in `.CFG` order, each `{key, label, activity}`: the first of the command's keys, its `LABEL` (its `NODE_ACTIVITY` without one), and its `NODE_ACTIVITY`. Commands the caller's access does not allow, hidden commands and `//` and `~~` entries are left out. When any command has a `LABEL`, only labelled commands are listed |
+| `v3.menu.shortcuts` | array | Every key the caller may use on the menu, hidden commands and alternative keys included, so the script can accept a key it does not show |
+| `v3.menu.items[].value` | string | A setting's current value on a built-in screen (below); `""` for a menu command |
+| `v3.menu.body` | array | A built-in screen's rows of plain text to show above the items; empty for a menu |
+| `v3.menu.selected` | string | The key of the item a built-in screen wants highlighted first; `""` for a menu |
+| `v3.menu.notice` | string | The result of the caller's last action on a built-in screen, such as a refusal; `""` when there is none |
+| `v3.menu.hint` | string | A built-in screen's standing line of help; `""` for a menu |
+| `v3.menu.field(key, x, y, width)` | | User Konfig only (other screens ignore it): where the script shows the field of the setting with key `key`: column `x` and row `y`, counted from 1 as `v3.console.gotoxy` counts them, and `width` columns wide (optional; the screen picks one when it is left out or 0). The setting's text editor draws its input box there; see the `KONFIG.MNU` row below for where its label goes and when the field is not used. A call without a key or with a position below 1 is ignored |
+| `v3.menu.promptRow(y)` | | User Konfig only (other screens ignore it): the row the screen may use for an editor's label, range hint and prompts. The result of an edit is not drawn there; it reaches the script as `notice` on its next run. A row below 1 is ignored, and so is this row for a setting whose field is on it: keep the prompt row off the field rows |
+| `v3.menu.expand(text)` | string | `text` with the board's placeholder codes filled in for this caller, the same codes a menu prompt takes (`\|UH`, `\|CC`, `\|CAN`, `\|TL`). Colour codes are left as written |
+
+```javascript
+// menu.js: any menu, one script
+v3.console.clear();
+v3.console.println("|15" + v3.menu.title);
+v3.menu.items.forEach(function (it) {
+    v3.console.println("|13" + it.key + " |07" + it.label);
+});
+v3.console.print("|08> ");
+v3.prompt.answer(v3.console.getstr(10));
+```
+
+The menu shows its `.ANS` and prompt as usual when the door or theme script does not exist, is not a `v3_script`
+door, is not allowed for the caller by its level or ACS, is busy, or its file is missing; when the
+script fails; and when it ends without an answer or with an empty one. The reason is logged once
+per menu. Before login no script runs. A chained command line (`M;N`) runs its later commands
+without drawing the menus in between.
+
+Built-in screens hand their drawing to a script the same way. Each does so only when its own
+`.MNU` names a `SCRIPT`; the menu set's `menuScript` does not reach them.
+
+| `.MNU` | Screen | What the script gets | Answers |
+|--------|--------|----------------------|---------|
+| `KONFIG.MNU` | User Konfig (`RUN:USERCONFIG`) | One item per setting, in form order: `key`, `label`, `value` as the form shows it (a password is masked) and `activity` holding the setting's help. `selected` is the setting last edited and `notice` what that edit reported | A setting's key runs that setting's editor and the script is run again; `Q` or `ESC` leaves. A text editor draws its input box in the setting's `v3.menu.field`, with its label and any range hint on the `v3.menu.promptRow`. Without a prompt row the label goes just left of the field and a range hint just right of it. A field that is off the screen or too narrow for a character and the cursor (2 columns on CP437, 5 on UTF-8) is not used, and the input goes on the prompt row. The screen is cleared and the editor uses the built-in form's rows only when it has nowhere else: no usable field and no prompt row, or no prompt row and no room beside the field for the label or the range hint. The Menu Prompt editor shows a live preview on a row of its own, which a script cannot name, so it always clears the screen. The Auto-Signature choice goes on the prompt row, or in the field when it fits there. A switch draws nothing. The File Columns and Colours boxes draw over the script's screen and show their messages inside the box. The result of every edit reaches the script as `notice` |
+| `TWITLIST.MNU` | Twit List | `body` holds up to 12 entries, one row each, numbered as Delete takes them. Items are Add, Delete, Clear, Back and, with more than one page, `[` and `]`. `hint` gives the counts and the page | A command's key; the screen's own prompts follow for Add, Delete and Clear |
+| `USERLIST.MNU` | User list (`RUN:LISTUSERS`), on a screen of at least 80x24 | One item, `Q` Back. The script reads the users with `v3.users.publicList()` and pages and searches them itself | `Q` when the caller leaves. Any other answer draws the built-in list |
+| `FASTLOGN.MNU` | Fast Logon (`RUN:FASTLOGIN`), before the first menu | `items` and `shortcuts` from `FASTLOGN.CFG` as for a menu: the commands the caller's access allows that Fast Logon carries out (`RUN:FULL_LOGIN_SEQUENCE`, `GOTO:`, `RUN:MAINLOGOFF`, `LOGOFF`, `RUN:IMMEDIATELOGOFF`) | A command's key, acted on as if pressed on the screen. A key that is no command the caller may use draws the built-in screen, which then reads the caller's key |
+| `YOURSTAT.MNU` | Your stats (`USERSTATS` in `login.json`, `RUN:SHOWSTATS`), in the caller's own theme | One item, `Q` Continue. The script reads the caller with `v3.user` | `Q` when the caller is done. With no answer the built-in `YOURSTAT.ANS` screen is drawn after the script |
+
+Labels, values and body rows are plain text that may hold a caller's own words. Write them with
+`v3.console.write`, which prints pipe codes as text. When the script cannot run or gives no usable
+answer, the screen draws itself.
+
 ---
 
 ### v3.user
@@ -476,6 +584,8 @@ Current user with live accessor properties and write support. All properties ref
 | `messagesPosted` | number | Total messages posted |
 | `uploads` | number | Number of uploads |
 | `downloads` | number | Number of downloads |
+| `uploadedBytes` | number | Bytes uploaded, all time |
+| `downloadedBytes` | number | Bytes downloaded, all time |
 | `filePoints` | number | File points balance |
 | `validated` | boolean | Whether user is validated |
 
@@ -514,6 +624,8 @@ Read-only access to the user database. Returns safe fields only — no passwords
 | `getByID(id)` | object \| `null` | Look up user by numeric ID |
 | `count()` | number | Total registered user count |
 | `list()` | array | All users (safe fields only) |
+| `publicList()` | array | Alphabetical public directory, excluding deleted accounts; only `handle`, `location`, `accessLevel`, and `validated` |
+| `lastCallers(n)` | array | The `n` most recent calls, newest first, without invisible logins (default 10; `0` returns every call kept) |
 
 **User object fields** (returned by `get`, `getByID`, `list`):
 
@@ -528,11 +640,29 @@ Read-only access to the user database. Returns safe fields only — no passwords
 | `messagesPosted` | number |
 | `uploads` | number |
 | `downloads` | number |
+| `uploadedBytes` | number |
+| `downloadedBytes` | number |
 | `filePoints` | number |
 | `validated` | boolean |
 | `lastLogin` | number (Unix timestamp) |
 | `previousLogin` | number (Unix timestamp, `0` if never) |
 | `createdAt` | number (Unix timestamp) |
+
+**Call object fields** (returned by `lastCallers`):
+
+| Field | Type |
+|-------|------|
+| `callNumber` | number |
+| `userID` | number |
+| `handle` | string |
+| `location` | string (the caller's group/location) |
+| `node` | number |
+| `connectTime` | number (Unix timestamp) |
+| `disconnectTime` | number (Unix timestamp) |
+| `minutes` | number |
+| `from` | string: where the caller's IP is, such as `MO/US`, a country code such as `GB`, `LAN`, or `""` (see `geoipPath` in config.json) |
+
+`scripts/examples/amilc.js` uses these for an AmiExpress-style last callers screen.
 
 #### `lastLogin` vs `previousLogin`
 
@@ -965,6 +1095,85 @@ for (var i = 0; i < Math.min(rows.length, 22); i++) {
 
 ---
 
+### v3.gfx
+
+Pixel graphics, for terminals that draw sixel. At connect the board asks the terminal for its
+device attributes (`CSI < c`, then `CSI c`); `sixel` is `true` when the primary reply lists
+attribute 4, CTerm's extended reply lists feature 4, or the reply is CTerm 1.189 or later. The
+terminal's announced type plays no part. The probe waits at most 750 ms and stops as soon as the
+primary reply arrives; a reply after that, including an extended reply that follows the primary
+one, does not count. A terminal with no primary reply in time gets `false`. A caller can force sixel on or off with **Sixel Graphics** in Konfig
+(**K**), which overrides the answer. A script should always have a text version to draw.
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `sixel` | boolean | Whether the caller's terminal draws sixel graphics |
+| `image(path[, palette])` | function | Draws a PNG, GIF (first frame) or JPEG from the script's data directory with its top-left corner at the cursor's cell. Returns `false`, having drawn nothing, when `sixel` is `false` or a file is missing, outside the data directory, not a picture, or larger than 1280x1024 pixels. `palette` names a picture whose colours, in the order they first appear, are the colours to draw with |
+| `canvas(width, height[, palette])` | function | Creates a server-side pixel canvas; `palette` is an optional image in the data directory with 1–256 opaque colours. Invalid dimensions, an invalid palette, or a fifth canvas in one script throws an error. |
+
+The canvas is a small Vision/3 API, not the browser Canvas API. Coordinates and
+dimensions are pixels; images are read from `scripts/data/`. A canvas is at
+most 1280 pixels wide and 1024 high, and each script can create at most four
+canvases.
+
+| Canvas member | Description |
+| --- | --- |
+| `width`, `height` | Canvas dimensions in pixels. |
+| `clear(r, g, b[, a])` | Fill the canvas with a colour. Alpha defaults to 255. |
+| `fillRect(x, y, width, height, r, g, b[, a])` | Fill a clipped rectangle. |
+| `setPixel(x, y, r, g, b[, a])` | Set one pixel; out-of-bounds writes are ignored. |
+| `getPixel(x, y)` | Return `[r,g,b,a]`, or `null` outside the canvas. |
+| `drawImage(path, x, y)` | Composite an image at a pixel position; an invalid or inaccessible image throws. |
+| `wave(amplitude, period, phase[, opaqueBlack])` | Shift each row by a sine wave, with amplitude and period in pixels and phase in radians. Exposed edges are transparent, or opaque black when `opaqueBlack` is true. |
+| `heat(time, strength[, hotOnly])` | Apply an animated rising heat haze to the canvas. `time` is in seconds; `strength` is a fraction from 0 to 0.1. Set `hotOnly` to concentrate displacement on warm or bright pixels anywhere in the image. The effect uses a coarsely sampled noise field and smooth, edge-protected sampling. |
+| `present()` | Draw the canvas at the terminal cursor and return `true`, or return `false` without output when sixel is unavailable. |
+| `presentDelta()` | Draw changed pixels since this canvas's previous presentation. The first frame is complete; position the cursor at the same canvas origin for later frames. Both frames must be fully opaque. Returns `false` on non-sixel terminals; transparent frames throw. If other output overwrites the image or changes the sixel palette, call `present()` for a full redraw. |
+
+Colour channels are clamped to 0–255. Canvas presentation uses one stable
+palette for its lifetime: the supplied palette image or a fixed colour cube.
+Use the same palette for all overlapping graphics on SyncTERM. `present()`
+transmits the full image; `presentDelta()` sends changed pixels and sixel bands
+using the previously defined palette. Tune animation to the caller's connection; this
+is not GPU rendering or a browser shader.
+
+The example below draws a wavy copy of a logo in the top rows of the screen and waits for a key.
+It reads `logo.png` from `scripts/data/` and uses it both as the picture and as the palette, so the
+file must have 1 to 256 opaque colours, and at 480x160 pixels it fills the canvas. The board ships
+one that fits: copy `menus/vision3/data/vision3-logo.png` to `scripts/data/logo.png`. The pause
+keeps the picture on screen; without it the script ends at once and the menu that started it
+clears the screen.
+
+```javascript
+if (v3.gfx.sixel) {
+    var canvas = v3.gfx.canvas(480, 160, "logo.png");
+    canvas.clear(0, 0, 0);
+    canvas.drawImage("logo.png", 0, 0);
+    canvas.wave(2, 60, 0.5, true);
+    v3.console.gotoxy(11, 1);
+    canvas.present();
+    v3.console.pause();
+}
+```
+
+A picture keeps its own colours when it has 256 or fewer and is reduced to a fixed palette
+otherwise. Pixels less than half opaque are not drawn, so a picture can change part of one already
+on the screen. Size the picture in pixels for the cells it should cover: SyncTERM's 80x25 mode has
+cells 8 pixels wide and 16 high. Text written over a picture replaces those cells, so keep text
+animation off them.
+
+SyncTERM keeps one set of sixel colours for the whole screen. A second picture with different
+colours recolours the first, so pictures shown together, and the frames of an animation, must all
+be drawn with the same `palette` picture: one pixel of every colour any of them uses.
+
+```javascript
+v3.console.gotoxy(3, 4);
+if (!v3.gfx.image("logo.png")) {
+    v3.console.print("|13my board");
+}
+```
+
+---
+
 ### v3.util
 
 Common utility functions for scripting.
@@ -984,6 +1193,7 @@ Common utility functions for scripting.
 | `stripAnsi(str)` | string | Remove ANSI escape sequences |
 | `stripPipe(str)` | string | Remove Vision/3 pipe codes |
 | `displayLen(str)` | number | Visible display length (ignoring ANSI and pipe codes) |
+| `fitColumns(str, width)` | string | `str` cut to at most `width` terminal columns between whole characters and padded with spaces to `width`. Columns are counted as the caller's terminal draws them: by grapheme cluster on UTF-8 (a joined emoji or a letter with its accent is one character), one per character on CP437. Pipe codes and escape sequences count as text, so it suits a caller's own words written with `v3.console.write`. A width below 1 gives an empty string |
 
 **Date format** uses Go's reference time layout. Common patterns:
 
@@ -1013,8 +1223,8 @@ Access to active BBS nodes (who's online) and inter-node messaging.
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `list()` | array | List active nodes. Invisible sessions hidden from non-sysops |
-| `count()` | number | Active node count (respects invisible flag) |
+| `list()` | array | List active nodes. Invisible sessions are hidden below level 200, [test accounts](../users/user-management.md#test-accounts) below the board's sysop level |
+| `count()` | number | Active node count, of the nodes `list()` returns |
 | `send(nodeNum, message)` | boolean | Send a page message to a specific node. Returns `false` if node not found |
 | `broadcast(message)` | — | Send a page message to all active nodes (except self) |
 

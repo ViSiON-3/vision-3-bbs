@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/v3net/protocol"
 )
 
@@ -80,11 +81,16 @@ func (e *MenuExecutor) v3netOnlineCount() int {
 		defer cancel()
 		return c.refresh(ctx, p)
 	}
-	go func() {
+	safego.Go(safego.KindV3NetOnline, nil, func() {
+		safego.TestPoint(safego.KindV3NetOnline)
 		ctx, cancel := context.WithTimeout(context.Background(), netOnlineRefreshTimeout)
 		defer cancel()
 		c.refresh(ctx, p)
-	}()
+	}, func() {
+		c.mu.Lock()
+		c.refreshing = false
+		c.mu.Unlock()
+	})
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.count

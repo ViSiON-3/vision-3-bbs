@@ -9,17 +9,30 @@ import (
 
 func TestConnectEncoding(t *testing.T) {
 	tests := []struct {
-		name           string
-		byName, probed ansi.OutputMode
-		want           ansi.OutputMode
+		name   string
+		flag   string
+		isPty  bool
+		probed ansi.OutputMode
+		want   ansi.OutputMode
 	}{
-		{"probe overrides a CP437 name", ansi.OutputModeCP437, ansi.OutputModeUTF8, ansi.OutputModeUTF8},
-		{"probe overrides a UTF-8 name", ansi.OutputModeUTF8, ansi.OutputModeCP437, ansi.OutputModeCP437},
-		{"no probe answer keeps the name", ansi.OutputModeCP437, ansi.OutputModeAuto, ansi.OutputModeCP437},
+		{"auto takes the probe's UTF-8", "auto", true, ansi.OutputModeUTF8, ansi.OutputModeUTF8},
+		{"auto takes the probe's CP437", "auto", true, ansi.OutputModeCP437, ansi.OutputModeCP437},
+		{"forced UTF-8", "utf8", true, ansi.OutputModeAuto, ansi.OutputModeUTF8},
+		{"forced CP437", "cp437", true, ansi.OutputModeAuto, ansi.OutputModeCP437},
+		{"no PTY", "auto", false, ansi.OutputModeAuto, ansi.OutputModeUTF8},
 	}
 	for _, tt := range tests {
-		if got := connectEncoding(tt.byName, tt.probed); got != tt.want {
+		if got := connectEncoding(tt.flag, tt.isPty, tt.probed); got != tt.want {
 			t.Errorf("%s: connectEncoding = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+// The forced modes skip the encoding probe; auto sends it.
+func TestProbeEncoding(t *testing.T) {
+	for flag, want := range map[string]bool{"auto": true, "utf8": false, "cp437": false} {
+		if got := probeEncoding(flag); got != want {
+			t.Errorf("probeEncoding(%q) = %v, want %v", flag, got, want)
 		}
 	}
 }

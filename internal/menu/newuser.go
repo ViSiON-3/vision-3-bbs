@@ -89,13 +89,7 @@ func (e *MenuExecutor) handleNewUserApplication(
 			closedMsg = "\r\n|12This BBS is not accepting new users at this time.|07\r\n"
 		}
 		e.writeString(terminal, outputMode, closedMsg)
-		pausePrompt := e.Strings().PauseString
-		if pausePrompt == "" {
-			pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
-		}
-		if !e.pauseAnswered(terminal, outputMode, pausePrompt) {
-			_, _ = readLineFromSessionIH(s, terminal)
-		}
+		_ = e.pauseHere(s, terminal, outputMode)
 		return nil, nil
 	}
 
@@ -307,15 +301,8 @@ func (e *MenuExecutor) handleNewUserApplication(
 	}
 
 	// Pause before returning
-	pausePrompt := e.Strings().PauseString
-	if pausePrompt == "" {
-		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
-	}
 	terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte("\r\n")), outputMode)
-	if e.pauseAnswered(terminal, outputMode, pausePrompt) {
-		return newUser, nil
-	}
-	if _, pauseErr := readLineFromSessionIH(s, terminal); pauseErr != nil {
+	if pauseErr := e.pauseHere(s, terminal, outputMode); pauseErr != nil {
 		// The account is created and saved either way, but a caller who has
 		// dropped must not have a session opened for them: the callers' io.EOF
 		// handling has to run before they reach continueAsNewUser.

@@ -168,3 +168,31 @@ func PipeCodeAttr(code string) int {
 	}
 	return attr
 }
+
+// ThemeColorSlotCodes is BoardColorSlotCodes for the theme at menuSet as
+// its callers see it: the board's theme.colors apply only when menuSet is
+// the theme configDir's config.json selects; any other theme is drawn as
+// it ships, with its overlay, as a caller's view of it is. The legacy
+// defColorN in the strings file at stringsPath apply either way. Nothing is
+// logged.
+func ThemeColorSlotCodes(bbsRoot, configDir, stringsPath, menuSet string) [7]string {
+	name := menuset.DefaultTheme
+	if sel, err := themeSelectionFromConfigDir(configDir); err == nil && sel.Name != "" {
+		name = sel.Name
+	}
+	if board, err := menuset.CheckTheme(bbsRoot, name); err == nil && sameDir(board, menuSet) {
+		return BoardColorSlotCodes(bbsRoot, configDir, stringsPath, menuSet)
+	}
+	if stringsPath == "" {
+		stringsPath = filepath.Join(configDir, "strings.json")
+	}
+	theme, _ := readThemeConfig(menuSet)
+	return theme.ColorSlotCodes(LegacyColorSlotsFile(stringsPath))
+}
+
+// sameDir reports whether a and b name the same directory path.
+func sameDir(a, b string) bool {
+	absA, errA := filepath.Abs(a)
+	absB, errB := filepath.Abs(b)
+	return errA == nil && errB == nil && absA == absB
+}

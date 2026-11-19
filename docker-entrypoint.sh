@@ -93,6 +93,11 @@ for template_file in /vision3/templates/configs/*.json /vision3/templates/config
     [ -f "$template_file" ] || continue
     [ "$(basename "$template_file")" = "strings.json" ] && continue
     target="/vision3/configs/$(basename "$template_file")"
+    # A board on the Reddit gateway's reddit.json keeps reading it until the
+    # sysop writes sources.json; a template sources.json would replace it.
+    if [ "$(basename "$target")" = "sources.json" ] && [ -f /vision3/configs/reddit.json ]; then
+        continue
+    fi
     if [ ! -f "$target" ]; then
         echo "  Creating $(basename "$target") from template..."
         cp "$template_file" "$target"

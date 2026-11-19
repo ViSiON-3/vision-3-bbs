@@ -19,8 +19,8 @@ func (m Model) viewEditScreen() string {
 	}
 	u := m.users[m.editIndex]
 
-	// Fixed rows: title(1) + box(border, 19 field rows, border = 21) + help(1).
-	const editRowFirst, editRowLast = 4, 22
+	// Fixed rows: title(1) + box(border, 20 field rows, border = 22) + help(1).
+	const editRowFirst, editRowLast = 4, 23
 	boxRows := (editRowLast - editRowFirst + 1) + 2
 	topPad, bottomPad := tuiart.Split(m.height, boxRows+2)
 
@@ -126,7 +126,7 @@ func (m Model) renderEditRow(row int, u *userType, boxW int) string {
 	}
 
 	// Separator row between editable and read-only fields
-	if row == 17 {
+	if row == 18 {
 		sepText := "-- Read Only --"
 		sepPad := (boxW - len(sepText)) / 2
 		return separatorStyle.Render(strings.Repeat("─", sepPad)) +
@@ -134,8 +134,8 @@ func (m Model) renderEditRow(row int, u *userType, boxW int) string {
 			separatorStyle.Render(strings.Repeat("─", max(0, boxW-sepPad-len(sepText))))
 	}
 
-	// Special row: User Number display (row 22 in the box)
-	if row == 22 {
+	// Special row: User Number display (row 23 in the box)
+	if row == 23 {
 		infoText := fmt.Sprintf("User Number: %d of %d", m.editIndex+1, len(m.users))
 		infoRendered := editInfoLabelStyle.Render("User Number: ") +
 			editInfoValueStyle.Render(fmt.Sprintf("%d", m.editIndex+1)) +

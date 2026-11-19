@@ -1,0 +1,98 @@
+[
+  {
+    "area_tag": "REDDIT_BBS",
+    "msg_num": 1,
+    "from": "u/bob",
+    "to": "All",
+    "subject": "A link \u0026 more ☃",
+    "text": "https://example.com/page\r\rhttps://www.reddit.com/r/bbs/comments/bbb222/a_link/",
+    "msg_id": "t3_bbb222@reddit",
+    "reply_id": "",
+    "reply_to": 0,
+    "date_time": 1790900000,
+    "kludges": [
+      "CHRS: UTF-8 4",
+      "REDDIT: https://www.reddit.com/r/bbs/comments/bbb222/a_link/"
+    ]
+  },
+  {
+    "area_tag": "REDDIT_BBS",
+    "msg_num": 2,
+    "from": "u/alice",
+    "to": "All",
+    "subject": "First post",
+    "text": "Hello there \u003chttps://example.com\u003e\r\rhttps://www.reddit.com/r/bbs/comments/aaa111/first_post/",
+    "msg_id": "t3_aaa111@reddit",
+    "reply_id": "",
+    "reply_to": 0,
+    "date_time": 1790985694,
+    "kludges": [
+      "CHRS: UTF-8 4",
+      "REDDIT: https://www.reddit.com/r/bbs/comments/aaa111/first_post/"
+    ]
+  },
+  {
+    "area_tag": "REDDIT_BBS",
+    "msg_num": 3,
+    "from": "u/carol",
+    "to": "All",
+    "subject": "Re: First post",
+    "text": "Top level\r\rhttps://www.reddit.com/r/bbs/comments/aaa111/first_post/",
+    "msg_id": "t1_c1@reddit",
+    "reply_id": "t3_aaa111@reddit",
+    "reply_to": 2,
+    "date_time": 1790989200,
+    "kludges": [
+      "CHRS: UTF-8 4",
+      "REDDIT: https://www.reddit.com/r/bbs/comments/aaa111/first_post/"
+    ]
+  },
+  {
+    "area_tag": "REDDIT_BBS",
+    "msg_num": 4,
+    "from": "u/dave",
+    "to": "All",
+    "subject": "Re: First post",
+    "text": "Nested reply\r\rhttps://www.reddit.com/r/bbs/comments/aaa111/first_post/",
+    "msg_id": "t1_c2@reddit",
+    "reply_id": "t1_c1@reddit",
+    "reply_to": 3,
+    "date_time": 1790992800,
+    "kludges": [
+      "CHRS: UTF-8 4",
+      "REDDIT: https://www.reddit.com/r/bbs/comments/aaa111/first_post/"
+    ]
+  },
+  {
+    "area_tag": "REDDIT_BBS",
+    "msg_num": 5,
+    "from": "u/[deleted]",
+    "to": "All",
+    "subject": "Re: First post",
+    "text": "[removed]\r\rhttps://www.reddit.com/r/bbs/comments/aaa111/first_post/",
+    "msg_id": "t1_c3@reddit",
+    "reply_id": "t3_aaa111@reddit",
+    "reply_to": 2,
+    "date_time": 1790996400,
+    "kludges": [
+      "CHRS: UTF-8 4",
+      "REDDIT: https://www.reddit.com/r/bbs/comments/aaa111/first_post/"
+    ]
+  },
+  {
+    "area_tag": "REDDIT_BBS",
+    "msg_num": 6,
+    "from": "u/frank",
+    "to": "All",
+    "subject": "Re: First post",
+    "text": "Reply to a removed comment\r\rhttps://www.reddit.com/r/bbs/comments/aaa111/first_post/",
+    "msg_id": "t1_c5@reddit",
+    "reply_id": "t1_c3@reddit",
+    "reply_to": 5,
+    "date_time": 1790998200,
+    "kludges": [
+      "CHRS: UTF-8 4",
+      "REDDIT: https://www.reddit.com/r/bbs/comments/aaa111/first_post/"
+    ]
+  }
+]

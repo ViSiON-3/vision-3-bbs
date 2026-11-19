@@ -1138,6 +1138,15 @@
   "konfigSectionTerminal": [
     "Terminal"
   ],
+  "konfigSixelAuto": [
+    "|10Saved.|07 Sixel Graphics is now |15Auto|07, asked on every call."
+  ],
+  "konfigSixelHelp": [
+    "Auto asks your terminal at connect. Force On or Off only if Auto is wrong."
+  ],
+  "konfigSixelLabel": [
+    "Sixel Graphics"
+  ],
   "konfigStyleFormat": [
     "Style %d"
   ],

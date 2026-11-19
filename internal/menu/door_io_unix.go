@@ -131,6 +131,26 @@ func setDoorProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr.Setpgid = true
 }
 
+// killProcessGroupOf kills process group pgid, which a process started
+// with setDoorProcessGroup leads, unless pgid is 0, and then p. The group is named by the ID
+// saved at the start, not looked up, so it is found even once p itself has
+// been reaped while a child it left behind still holds its output.
+func killProcessGroupOf(pgid int, p *os.Process) {
+	if pgid > 0 {
+		_ = syscall.Kill(-pgid, syscall.SIGKILL) // ESRCH once the group is empty
+	}
+	_ = p.Kill() // best effort: it may have exited
+}
+
+// doorGroupOf returns the process group door process p leads, or 0 when it
+// leads none (killProcessGroupOf then kills p alone). Call it while p runs.
+func doorGroupOf(p *os.Process) int {
+	if pgid, err := syscall.Getpgid(p.Pid); err == nil && pgid == p.Pid {
+		return pgid
+	}
+	return 0
+}
+
 // hangUpDoorProcess ends a door as a modem hang-up would: SIGHUP to the door
 // and everything in its process group, then SIGKILL to whatever is left after
 // grace. exited is closed once the door process has been waited for.
@@ -142,12 +162,16 @@ func setDoorProcessGroup(cmd *exec.Cmd) {
 // reaped because the kernel doesn't reuse a process ID while a group with
 // that ID still exists. A door without a group is signalled only while it
 // is known to be running, since its ID could be reused once it is reaped.
-func hangUpDoorProcess(p *os.Process, exited <-chan struct{}, grace time.Duration) {
-	pgid, err := syscall.Getpgid(p.Pid)
-	if err == nil && pgid == p.Pid {
+//
+// pgid is the group p leads, taken while it ran (doorGroupOf), or 0 for
+// none: looked up now, it would not be found once p has been reaped while a
+// child of it still runs.
+func hangUpDoorProcess(p *os.Process, pgid int, exited <-chan struct{}, grace time.Duration) {
+	if pgid > 0 {
 		_ = syscall.Kill(-pgid, syscall.SIGHUP) // best effort: it may have exited
 		time.Sleep(grace)
-		_ = syscall.Kill(-pgid, syscall.SIGKILL) // ESRCH once the group is empty
+		// The group, and the door itself in case it has left the group.
+		killProcessGroupOf(pgid, p)
 		return
 	}
 	_ = p.Signal(syscall.SIGHUP) // best effort: it may have exited

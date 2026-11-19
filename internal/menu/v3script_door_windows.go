@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 	"github.com/ViSiON-3/vision-3-bbs/internal/version"
 )
@@ -43,6 +44,8 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		Args:       ctx.Config.Args,
 		Prompt:     ctx.Prompt,
 		MaxRunTime: v3ScriptRunLimit(ctx.Config),
+		DataDir:    ctx.ScriptDataDir,
+		Notice:     ctx.Notice,
 	}
 	if ctx.Executor != nil {
 		cfg.MenuSetPath = ctx.Executor.MenuSetPath
@@ -55,12 +58,14 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		UserHandle:       ctx.User.Handle,
 		UserRealName:     ctx.User.RealName,
 		AccessLevel:      ctx.User.AccessLevel,
+		SysOp:            ctx.User.AccessLevel >= ctx.Executor.GetServerConfig().SysOpLevel,
 		TimeLimit:        ctx.User.TimeLimit,
 		TimesCalled:      ctx.User.TimesCalled,
 		Location:         ctx.User.GroupLocation,
 		ScreenWidth:      ctx.User.ScreenWidth,
 		ScreenHeight:     ctx.User.ScreenHeight,
 		ArtWidth:         artWidth(ctx.Terminal, ctx.User.ScreenWidth),
+		Sixel:            sessionSixel(ctx.Session, ctx.CurrentUser),
 		NodeNumber:       ctx.NodeNumber,
 		SessionStartTime: ctx.SessionStartTime,
 		ChatCredit:       func() time.Duration { return chatCredit(ctx.Session) },
@@ -73,13 +78,14 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 	engineCtx, engineCancel := context.WithCancel(ctx.Session.Context())
 	defer engineCancel()
 	// The script ends when the BBS must end the door (see door_watch.go).
-	go func() {
+	safego.Go(safego.KindDoorWatch, ctx.NodeNumber, func() {
+		safego.TestPoint(safego.KindDoorWatch)
 		select {
 		case <-ctx.watch.Ended():
 			engineCancel()
 		case <-engineCtx.Done():
 		}
-	}()
+	}, engineCancel)
 
 	providers := &scripting.Providers{
 		UserMgr:         ctx.UserManager,
@@ -87,10 +93,15 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		MessageMgr:      ctx.Executor.MessageMgr,
 		FileMgr:         ctx.Executor.FileMgr,
 		SessionRegistry: ctx.Executor.SessionRegistry,
+		Oneliners:       onelinerScriptStore{e: ctx.Executor},
 		// The same check as a download from the area (see DOWNLOADFILE).
 		CanDownload: v3ScriptCanDownload(ctx),
 		// The same check as the file area menus (ACSList).
 		CanList: v3ScriptCanList(ctx),
+		Menu:    ctx.Menu,
+	}
+	if ctx.Guest {
+		providers = &scripting.Providers{}
 	}
 
 	eng := scripting.NewEngine(engineCtx, session, cfg, providers)

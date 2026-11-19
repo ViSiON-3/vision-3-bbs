@@ -139,7 +139,7 @@ func registerData(v3 *goja.Object, eng *Engine) {
 func dataFilePath(cfg ScriptConfig) string {
 	scriptName := filepath.Base(cfg.Script)
 	scriptName = strings.TrimSuffix(scriptName, filepath.Ext(scriptName))
-	return filepath.Join(resolveDataDir(cfg.WorkingDir), scriptName+".json")
+	return filepath.Join(sandboxRoot(cfg), scriptName+".json")
 }
 
 // resolveDataDir returns the scripts/data directory for the given working dir.

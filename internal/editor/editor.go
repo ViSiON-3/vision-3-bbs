@@ -9,6 +9,7 @@ package editor
 
 import (
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/menuset"
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/winch"
 	"github.com/gliderlabs/ssh"
 )
@@ -47,6 +49,10 @@ type EditorContext struct {
 	// with the board's colours over it.
 	MenuSetPath string
 	Theme       *config.ThemeConfig
+	// Strings are the session's strings as the menus print them: the
+	// board's with its theme's strings.json over them. Unset, the
+	// editor reads configs/strings.json and the theme's file itself.
+	Strings *config.StringsConfig
 }
 
 func resolveEditorPaths() (menuSetPath, rootConfigPath string) {
@@ -161,7 +167,22 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 	yesNoLo := colorCodeToAnsi(theme.Color(config.RoleYesNoRegular), true)
 
 	// Load configurable Yes/No labels for prompts.
-	stringsCfg, stringsErr := config.LoadStrings(rootConfigPath)
+	var stringsCfg config.StringsConfig
+	var stringsErr error
+	if sessionTheme.Strings != nil {
+		stringsCfg = *sessionTheme.Strings
+	} else {
+		stringsCfg, stringsErr = config.LoadStrings(rootConfigPath)
+		// The theme's strings.json over the board's, as the menus print
+		// them.
+		if stringsErr == nil && menuSetPath != "" {
+			if themeStrings, err := config.LoadThemeStrings(menuSetPath); err == nil {
+				stringsCfg = stringsCfg.WithTheme(themeStrings)
+			} else {
+				slog.Warn("editor: theme strings not loaded; using the board's", "error", err)
+			}
+		}
+	}
 	yesText := "Yes"
 	noText := "No"
 	abortText := "|07Abort Message & Quit, Are You Sure|09?"
@@ -254,10 +275,11 @@ func RunEditorWithMetadata(initialContent string, input io.Reader, output io.Wri
 		done := make(chan struct{})
 		var wg sync.WaitGroup
 		wg.Add(1)
-		go func() {
+		safego.Go(safego.KindResize, input, func() {
 			defer wg.Done()
+			safego.TestPoint(safego.KindResize)
 			forwardResizes(winCh, resizes, done, editor.input.Interrupt)
-		}()
+		}, nil)
 		defer func() {
 			close(done)
 			wg.Wait()

@@ -1,0 +1,10 @@
+{
+  "chrome_debug_url": "http://127.0.0.1:9222",
+  "page_delay_seconds": 20,
+  "max_items_per_sync": 25,
+  "max_run_seconds": 540,
+  "page_timeout_seconds": 60,
+  "feeds": [
+    {"source": "reddit", "target": "bbs", "area_tag": "REDDIT_BBS", "enabled": false}
+  ]
+}

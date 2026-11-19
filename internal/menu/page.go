@@ -36,14 +36,15 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 			sessHandle = sess.User.Handle
 		}
 		sessNodeID := sess.NodeID
-		sessInvisible := sess.Invisible
+		sessInvisible, sessTest := sess.Invisible, sess.TestLogin
 		sess.Mutex.RUnlock()
 
 		if sessNodeID == nodeNumber {
 			continue // Skip self
 		}
-		// Skip invisible sessions for non-CoSysOp viewers
-		if sessInvisible && !e.isCoSysOpOrAbove(currentUser) {
+		// Skip invisible sessions for non-CoSysOp viewers, and test logins
+		// for non-SysOp viewers.
+		if e.hiddenOnline(currentUser, sessInvisible, sessTest) {
 			continue
 		}
 		e.writeStringf(terminal, outputMode, e.Strings().PageNodeListEntry, sessNodeID, sessHandle)
@@ -83,9 +84,9 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 		return nil, "", nil
 	}
 	targetSession.Mutex.RLock()
-	targetInvisible := targetSession.Invisible
+	targetInvisible, targetTest := targetSession.Invisible, targetSession.TestLogin
 	targetSession.Mutex.RUnlock()
-	if targetInvisible && !e.isCoSysOpOrAbove(currentUser) {
+	if e.hiddenOnline(currentUser, targetInvisible, targetTest) {
 		e.writeString(terminal, outputMode, e.Strings().PageNodeOffline)
 		uiPause(500 * time.Millisecond)
 		return nil, "", nil
@@ -110,9 +111,17 @@ func runPage(c *cmdCtx, args string) (*user.User, string, error) {
 	// A logged-in target's page is kept for their account, so it survives them
 	// leaving before they see it; one still at login only has this session.
 	pageMsg := fmt.Sprintf(e.Strings().PageMessageFormat, threadEscapePipes(handle), msgInput)
+	// The target may have finished logging in while the message was typed:
+	// check again what this caller may see.
 	targetSession.Mutex.RLock()
 	targetUser := targetSession.User
+	targetInvisible, targetTest = targetSession.Invisible, targetSession.TestLogin
 	targetSession.Mutex.RUnlock()
+	if e.hiddenOnline(currentUser, targetInvisible, targetTest) {
+		e.writeString(terminal, outputMode, e.Strings().PageNodeOffline)
+		uiPause(500 * time.Millisecond)
+		return nil, "", nil
+	}
 	if targetUser != nil {
 		_ = e.SessionRegistry.SendToast(e.toastStore(), targetUser.ID, toast.Toast{Text: pageMsg})
 	} else {

@@ -58,7 +58,7 @@ func runLoginWhosOnline(c *cmdCtx, args string) (*user.User, string, error) {
 		for _, sess := range sessions {
 			sess.Mutex.RLock()
 			sessNodeID := sess.NodeID
-			sessInvisible := sess.Invisible
+			sessInvisible, sessTest := sess.Invisible, sess.TestLogin
 			sessUser := sess.User
 			sess.Mutex.RUnlock()
 
@@ -68,7 +68,7 @@ func runLoginWhosOnline(c *cmdCtx, args string) (*user.User, string, error) {
 			if sessNodeID == nodeNumber {
 				continue
 			}
-			if sessInvisible && !e.isCoSysOpOrAbove(currentUser) {
+			if e.hiddenOnline(currentUser, sessInvisible, sessTest) {
 				continue
 			}
 			otherVisible++
@@ -161,7 +161,7 @@ func runWhoIsOnline(c *cmdCtx, args string) (*user.User, string, error) {
 	for _, sess := range sessions {
 		// Read all volatile session fields under a single lock to prevent data races.
 		sess.Mutex.RLock()
-		sessInvisible := sess.Invisible
+		sessInvisible, sessTest := sess.Invisible, sess.TestLogin
 		sessNodeID := sess.NodeID
 		sessStartTime := sess.StartTime
 		userName := "Logging In..."
@@ -179,8 +179,9 @@ func runWhoIsOnline(c *cmdCtx, args string) (*user.User, string, error) {
 		lastActivity := sess.LastActivity
 		sess.Mutex.RUnlock()
 
-		// Skip invisible sessions for non-CoSysOp viewers
-		if sessInvisible && !e.isCoSysOpOrAbove(currentUser) {
+		// Skip invisible sessions for non-CoSysOp viewers, and test logins
+		// for non-SysOp viewers.
+		if e.hiddenOnline(currentUser, sessInvisible, sessTest) {
 			continue
 		}
 		visibleCount++

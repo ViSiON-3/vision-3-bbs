@@ -8,6 +8,10 @@ type CommandRecord struct {
 	Hidden       bool   `json:"HIDDEN"`                  // Whether the command is hidden (H flag)
 	AutoRun      string `json:"AUTORUN,omitempty"`       // Type of auto-run (e.g., "ONCE_PER_SESSION")
 	NodeActivity string `json:"NODE_ACTIVITY,omitempty"` // Descriptive activity text for Who's Online
+	// Label is the text a menu script shows for the command (v3.menu.items).
+	// When any command of a menu has one, only the labelled commands are
+	// listed; the rest still work as keys.
+	Label string `json:"LABEL,omitempty"`
 }
 
 // GetHidden is a helper method to safely access the Hidden field.

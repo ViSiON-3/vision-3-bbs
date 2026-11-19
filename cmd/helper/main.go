@@ -119,6 +119,12 @@ func main() {
 		cmdFiles(os.Args[2:])
 	case "areas":
 		cmdAreas(os.Args[2:])
+	case "source":
+		cmdSource(os.Args[2:])
+	case "reddit":
+		cmdReddit(os.Args[2:])
+	case "nntp":
+		cmdNNTP(os.Args[2:])
 	case "post":
 		cmdPost(os.Args[2:])
 	default:
@@ -161,6 +167,13 @@ func printUsage(errMsg string) {
 	_, _ = fmt.Fprintf(w, "  %sFile Commands:%s\n", clrBold, clrReset)
 	_, _ = fmt.Fprintln(w, helpcmd("FILES IMPORT", "Bulk import files from a directory into a file area"))
 	_, _ = fmt.Fprintln(w, helpcmd("FILES REEXTRACTDIZ", "Re-extract FILE_ID.DIZ and update descriptions"))
+	_, _ = fmt.Fprintln(w)
+	_, _ = fmt.Fprintf(w, "  %sSource Gateway Commands:%s\n", clrBold, clrReset)
+	_, _ = fmt.Fprintln(w, helpcmd("NNTP SYNC", "Import public text newsgroups from nntp.json"))
+	_, _ = fmt.Fprintln(w, helpcmd("SOURCE SYNC", "Import the feeds in sources.json into their message areas"))
+	_, _ = fmt.Fprintln(w, helpcmd("SOURCE DUMP", "Print the part of a page a source definition keeps"))
+	_, _ = fmt.Fprintln(w, helpcmd("REDDIT SYNC", "Same as SOURCE SYNC --source reddit"))
+	_, _ = fmt.Fprintln(w, helpcmd("REDDIT DUMP", "Same as SOURCE DUMP --source reddit"))
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintf(w, "  %sGlobal Options:%s\n", clrBold, clrReset)
 	_, _ = fmt.Fprintln(w, helpopt("--config DIR", "Config directory (default: configs)"))

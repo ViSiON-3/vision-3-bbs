@@ -23,6 +23,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/chat"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -209,8 +210,9 @@ func probeChatNetworksOpt(leaves []ChatLeafInfo, handle string, withLocal bool) 
 			continue
 		}
 		wg.Add(1)
-		go func() {
+		safego.Go(safego.KindChat, nil, func() {
 			defer wg.Done()
+			safego.TestPoint(safego.KindChat)
 			// A nil session here would otherwise panic in this goroutine and
 			// take the whole BBS down, not just this node.
 			probe := leaf.NewSession(handle)
@@ -229,11 +231,15 @@ func probeChatNetworksOpt(leaves []ChatLeafInfo, handle string, withLocal bool) 
 			// that answered in time is closed by the time the picker returns
 			// (#939); only a timed-out probe is closed later, when its Rooms
 			// call finally returns.
-			go func() {
-				rooms, err := probe.Rooms()
-				probe.Close() //nolint:errcheck
+			safego.Go(safego.KindChat, nil, func() {
+				safego.TestPoint(safego.KindChat)
+				// Closed by a defer, so a panic in Rooms still closes it.
+				rooms, err := func() ([]chat.RoomInfo, error) {
+					defer probe.Close() //nolint:errcheck
+					return probe.Rooms()
+				}()
 				ch <- result{rooms, err}
-			}()
+			}, nil)
 			select {
 			case res := <-ch:
 				if res.err != nil {
@@ -245,7 +251,7 @@ func probeChatNetworksOpt(leaves []ChatLeafInfo, handle string, withLocal bool) 
 				}
 			case <-time.After(chatProbeTimeout):
 			}
-		}()
+		}, nil)
 	}
 	wg.Wait()
 	if withLocal {
@@ -792,8 +798,42 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 	// closed, then closes done. It runs on its own goroutine, one per
 	// service: /network starts a new one after closing the old service.
 	ih := getSessionIH(s)
+	// pumpPanicked tells the caller their chat has stopped hearing the room,
+	// when pumpEvents panics; the loop below then leaves it at their next
+	// line (see done). The service is not closed here: the loop's own
+	// cleanup closes it, once.
+	pumpPanicked := func() {
+		rawMu.Lock()
+		defer rawMu.Unlock()
+		// A caller paged back would not see it in scrollback.
+		if scrollback.toLive() {
+			drawRegionLocked()
+			drawStatusBarLocked()
+		}
+		writeChatLineLocked(fmt.Sprintf(e.Strings().ChatSystemPrefix, "Chat stopped working; press Enter to leave."))
+	}
 	pumpEvents := func(svc chat.ChatService, done chan struct{}) {
 		defer close(done)
+		// Runs before done closes, so the notice is on the screen before
+		// the chat can see the pump gone and leave.
+		defer func() {
+			if r := recover(); r != nil {
+				pumpPanicked()
+				panic(r) // for safego.Go to log
+			}
+		}()
+		// lock and unlock take rawMu for this goroutine; a panic while
+		// it holds rawMu lets it go on the way out (see safego.Go), so
+		// the screen it shares is not left locked.
+		held := false
+		lock := func() { rawMu.Lock(); held = true }
+		unlock := func() { held = false; rawMu.Unlock() }
+		defer func() {
+			if held {
+				rawMu.Unlock()
+			}
+		}()
+		safego.TestPoint(safego.KindChat)
 		for ev := range svc.Events() {
 			switch ev.Type {
 			case chat.TypeMessage, chat.TypePrivate, chat.TypeJoin, chat.TypeLeave, chat.TypeTopic:
@@ -803,9 +843,9 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			switch ev.Type {
 			case chat.TypeMessage:
 				if ev.Message != nil {
-					rawMu.Lock()
+					lock()
 					if !ev.Message.IsSystem && hiddenLocked(ev.Message.Handle, ev.Message.Node) {
-						rawMu.Unlock()
+						unlock()
 						continue
 					}
 					writeChatMessageLocked(*ev.Message, formatChatMessage(*ev.Message, homeNode, e.Strings().ChatSystemPrefix, e.Strings().ChatMessageFormat))
@@ -813,23 +853,23 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 						mentions++
 						drawHeaderLocked()
 					}
-					rawMu.Unlock()
+					unlock()
 				}
 			case chat.TypePrivate:
 				if ev.Message != nil {
-					rawMu.Lock()
+					lock()
 					if hiddenLocked(ev.Message.Handle, ev.Message.Node) {
-						rawMu.Unlock()
+						unlock()
 						continue
 					}
 					from := chatUserName(ev.Message.Handle, ev.Message.Node, ev.Message.BBS, homeNode)
 					writeChatMessageLocked(*ev.Message, fmt.Sprintf(e.Strings().ChatPrivateMsgFormat, chatText(from), chatText(ev.Message.Text)))
-					rawMu.Unlock()
+					unlock()
 				}
 			case chat.TypeJoin:
 				if ev.Join != nil {
 					newUsers := svc.Users()
-					rawMu.Lock()
+					lock()
 					currentUsers = newUsers
 					if !ev.Silent && !hiddenLocked(ev.Join.Handle, ev.Join.Node) {
 						who := chatUserName(ev.Join.Handle, ev.Join.Node, ev.Join.BBS, homeNode)
@@ -837,12 +877,12 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					}
 					drawHeaderLocked()
 					drawStatusBarLocked()
-					rawMu.Unlock()
+					unlock()
 				}
 			case chat.TypeLeave:
 				if ev.Leave != nil {
 					newUsers := svc.Users()
-					rawMu.Lock()
+					lock()
 					currentUsers = newUsers
 					if !ev.Silent && !hiddenLocked(ev.Leave.Handle, ev.Leave.Node) {
 						who := chatUserName(ev.Leave.Handle, ev.Leave.Node, ev.Leave.BBS, homeNode)
@@ -850,20 +890,20 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					}
 					drawHeaderLocked()
 					drawStatusBarLocked()
-					rawMu.Unlock()
+					unlock()
 				}
 			case chat.TypeTopic:
 				if ev.Topic != nil {
-					rawMu.Lock()
+					lock()
 					currentTopic = ev.Topic.Topic
 					writeChatLineLocked(fmt.Sprintf(e.Strings().ChatTopicMsg, chatText(ev.Topic.Room), chatText(ev.Topic.Topic)))
 					drawHeaderLocked()
-					rawMu.Unlock()
+					unlock()
 				}
 			case chat.TypeSystem:
 				if ev.Reconnect {
 					newUsers := svc.Users()
-					rawMu.Lock()
+					lock()
 					currentUsers = newUsers
 					if ev.Topic != nil && ev.Topic.Room == currentRoom {
 						currentTopic = ev.Topic.Topic
@@ -871,7 +911,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					writeChatLineLocked(e.Strings().ChatReconnected)
 					drawHeaderLocked()
 					drawStatusBarLocked()
-					rawMu.Unlock()
+					unlock()
 				} else if ev.Text != "" {
 					writeChatLine(fmt.Sprintf(e.Strings().ChatSystemPrefix, chatText(ev.Text)))
 				}
@@ -879,7 +919,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 	}
 	done := make(chan struct{})
-	go pumpEvents(svc, done)
+	safego.Go(safego.KindChat, c.nodeNumber, func() { pumpEvents(svc, done) }, nil)
 
 	// startLag measures svc's round trip now and every chatLagInterval, if
 	// it is a chat.Pinger, and redraws the header when the shown value
@@ -895,8 +935,20 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		stopped := make(chan struct{})
-		go func() {
+		safego.Go(safego.KindChat, c.nodeNumber, func() {
 			defer close(stopped)
+			// lock and unlock take rawMu for this goroutine; a panic while
+			// it holds rawMu lets it go on the way out (see safego.Go), so
+			// the screen it shares is not left locked.
+			held := false
+			lock := func() { rawMu.Lock(); held = true }
+			unlock := func() { held = false; rawMu.Unlock() }
+			defer func() {
+				if held {
+					rawMu.Unlock()
+				}
+			}()
+			safego.TestPoint(safego.KindChat)
 			tick := time.NewTicker(chatLagInterval)
 			defer tick.Stop()
 			// The header may have been drawn before pinging was set, with a
@@ -904,7 +956,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			first := true
 			for {
 				d, err := p.Ping(ctx)
-				rawMu.Lock()
+				lock()
 				if ctx.Err() == nil {
 					wasShown, wasOK := lag.Milliseconds(), lagOK
 					lag, lagOK, lagKnown = d, err == nil, true
@@ -913,14 +965,14 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 					}
 					first = false
 				}
-				rawMu.Unlock()
+				unlock()
 				select {
 				case <-ctx.Done():
 					return
 				case <-tick.C:
 				}
 			}
-		}()
+		}, nil)
 		return func() {
 			cancel()
 			<-stopped
@@ -960,6 +1012,20 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 			break
 		}
 
+		// A local chat's event pump ends only with the chat, or when it
+		// panicked (safego.Go). Without it the caller hears nothing, and
+		// stays listed in the room: leave.
+		if !onNetwork {
+			pumpGone := false
+			select {
+			case <-done:
+				pumpGone = true
+			default:
+			}
+			if pumpGone {
+				break
+			}
+		}
 		// The leaf ends its sessions when a reload stops it (the reason
 		// was shown as a system line as it did), and the caller's
 		// agreement can be withdrawn under Preferences on another node.
@@ -1262,7 +1328,7 @@ func runChat(c *cmdCtx, args string) (*user.User, string, error) {
 
 			writeChatHistory(currentRoom, newHistory)
 
-			go pumpEvents(svc, done)
+			safego.Go(safego.KindChat, c.nodeNumber, func() { pumpEvents(svc, done) }, nil)
 			continue
 		}
 

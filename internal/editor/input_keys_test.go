@@ -10,6 +10,35 @@ import (
 	"time"
 )
 
+func TestReadKeyWithPollPreservesIdleAndInput(t *testing.T) {
+	r, w := io.Pipe()
+	defer r.Close()
+	defer w.Close()
+	ih := NewInputHandler(r)
+	ih.SetSessionIdleTimeout(75 * time.Millisecond)
+	start := time.Now()
+	for i := 0; i < 3; i++ {
+		if _, err := ih.ReadKeyWithPoll(10*time.Millisecond, start); !errors.Is(err, ErrReadPoll) {
+			t.Fatalf("poll %d: %v", i, err)
+		}
+	}
+	go func() { _, _ = w.Write([]byte("\x1b[B")) }()
+	if key, err := ih.ReadKeyWithPoll(50*time.Millisecond, start); err != nil || key != KeyArrowDown {
+		t.Fatalf("arrow = %d, %v", key, err)
+	}
+	start = time.Now()
+	for {
+		_, err := ih.ReadKeyWithPoll(10*time.Millisecond, start)
+		if errors.Is(err, ErrReadPoll) {
+			continue
+		}
+		if !errors.Is(err, ErrIdleTimeout) {
+			t.Fatalf("want idle timeout, got %v", err)
+		}
+		break
+	}
+}
+
 // A reader that has run dry reports EOF, which ends an escape sequence at once
 // instead of waiting out the inter-byte timeout, so these decode instantly.
 func TestReadKeyDecodesCSISequences(t *testing.T) {

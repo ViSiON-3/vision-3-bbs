@@ -87,3 +87,21 @@ func TestRunLoginDoor_StdinStopsAtExit(t *testing.T) {
 		t.Fatal("the key typed after the door never reached the session's next reader")
 	}
 }
+
+// A login script that leaves a child holding its output does not hold the
+// login up past doorOutputDrainTimeout.
+func TestRunLoginDoor_ChildHoldingOutputDoesNotHoldTheLogin(t *testing.T) {
+	old := doorOutputDrainTimeout
+	doorOutputDrainTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { doorOutputDrainTimeout = old })
+	env := newMenuEnv(t)
+
+	start := time.Now()
+	r := doorcovRun(env, newDoorcovSession(), runLoginDoor, env.caller, doorcovScript(t, `echo LEFT; sleep 30 &`))
+	if r.err != nil || r.user != env.caller || !r.has("LEFT") {
+		t.Fatalf("user=%s err=%v output:\n%s", execcovHandle(r.user), r.err, r.text())
+	}
+	if took := time.Since(start); took > 10*time.Second {
+		t.Errorf("the login waited %v for the script's child", took)
+	}
+}

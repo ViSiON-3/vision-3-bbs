@@ -151,6 +151,14 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 		cw.targets = append(cw.targets,
 			reloadTarget{name: "theme.json (overlay)", path: filepath.Join(overlay, "theme.json"), reload: cw.reloadTheme, reloadOnRemove: true})
 	}
+	// The board's theme's own strings, in either layer, over strings.json.
+	// Removing one is a change too: its keys go back to the board's.
+	cw.targets = append(cw.targets,
+		reloadTarget{name: "theme strings.json", path: filepath.Join(menuSetPath, config.ThemeStringsFile), reload: cw.reloadThemeStrings, reloadOnRemove: true})
+	if overlay := menuset.OverlayFor(menuSetPath); overlay != "" {
+		cw.targets = append(cw.targets,
+			reloadTarget{name: "theme strings.json (overlay)", path: filepath.Join(overlay, config.ThemeStringsFile), reload: cw.reloadThemeStrings, reloadOnRemove: true})
+	}
 	cw.targets = append(cw.targets, []reloadTarget{
 		{name: "protocols.json", path: filepath.Join(rootConfigPath, "protocols.json"), reload: cw.reloadProtocols},
 		{name: "events.json", path: filepath.Join(rootConfigPath, "events.json"), reload: cw.reloadEvents},
@@ -183,6 +191,11 @@ func NewConfigWatcher(rootConfigPath, menuSetPath string, menuExecutor *menu.Men
 	// Record current timestamps so the first poll does not reload everything
 	// that already loaded cleanly at startup.
 	cw.seed()
+	// The board theme's strings.json is read again for the same reason: the
+	// executor read it before the seed recorded its time.
+	if cw.menuExecutor != nil {
+		cw.menuExecutor.ReloadThemeStrings()
+	}
 	// Roles are read again now the file's state is recorded: a change, or
 	// a removal, between startup's read and the seed would otherwise never
 	// be seen, and a role the sysop removed in that gap would stay in force.
@@ -627,6 +640,12 @@ func (cw *ConfigWatcher) reloadStrings() {
 	// Update MenuExecutor's LoadedStrings atomically
 	cw.menuExecutor.SetStrings(newStrings)
 	slog.Info("strings.json reloaded")
+}
+
+// reloadThemeStrings reloads the strings.json of the board's theme.
+func (cw *ConfigWatcher) reloadThemeStrings() {
+	slog.Info("reloading the theme's strings.json", "theme", cw.menuSetPath)
+	cw.menuExecutor.ReloadThemeStrings()
 }
 
 // reloadTheme reloads the theme configuration.

@@ -15,6 +15,8 @@ func TestParseCPR(t *testing.T) {
 		{"bytes after the reply", "\x1b[5;3Rxyz", 5, 3, true},
 		{"partial reply", "\x1b[5;3", 0, 0, false},
 		{"missing column", "\x1b[5R", 0, 0, false},
+		{"row too large", "\x1b[999999999999999999999999999999;2R", 0, 0, false},
+		{"row zero", "\x1b[0;2R", 0, 0, false},
 		{"other CSI sequence", "\x1b[A", 0, 0, false},
 		{"empty", "", 0, 0, false},
 		{"garbage", "hello", 0, 0, false},
@@ -35,9 +37,9 @@ func TestEncodingFromProbeColumn(t *testing.T) {
 		col  int
 		want OutputMode
 	}{
-		{2, OutputModeUTF8},  // the 3-byte glyph drew as one cell
-		{3, OutputModeUTF8},  // drawn double-width
-		{4, OutputModeCP437}, // each byte drew as its own cell
+		{2, OutputModeUTF8},  // the 3-byte glyph moved the cursor one column
+		{3, OutputModeCP437}, // two columns
+		{4, OutputModeCP437}, // three: each byte drew as its own cell
 		{1, OutputModeAuto},  // nothing drawn
 		{5, OutputModeAuto},
 		{0, OutputModeAuto},

@@ -1,0 +1,16 @@
+{
+    "TITLE": "Main Menu",
+    "CLR": true,
+    "USEPROMPT": true,
+    "PROMPT1": "|C4|UH|{|C3 from |C6|GL|}|{ |C5(|C6|UN|C5)|}|C1",
+    "PROMPT2": "|C5[|C3|TIME|C5] |C5[|C4TL:|C3|TL|C5]|C4 |C5-|C4>|C2 ",
+    "FALLBACK": "MAIN",
+    "ACS": "",
+    "PASS": "",
+    "HELPMENU": "",
+    "FORCEHELPLEVEL": 0,
+    "MES_CONF": 0,
+    "FILE_CONF": 0,
+    "FORCEHOTKEY": false,
+    "SCRIPT": "mainmenu.js"
+}

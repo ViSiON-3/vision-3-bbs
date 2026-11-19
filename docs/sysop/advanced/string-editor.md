@@ -7,8 +7,12 @@ Every prompt, notice and error a caller sees — the pause string, the login pro
 ```bash
 ./strings                           # Edit configs/strings.json (default)
 ./strings --config path/to/file.json  # Edit a specific strings file
+./strings --theme amber              # Edit menus.d/amber/strings.json, theme amber's strings
+./strings --theme amber --no-overlay # Edit menus/amber/strings.json
 ./strings --help                     # Show usage
 ```
+
+`--theme` edits a theme's own strings, which a caller on that theme reads over `configs/strings.json`; it works on the board in the current directory. There, a key the file leaves out shows what prints in its place rather than the shipped text: in the overlay file, the theme's own value if its `menus/<name>/strings.json` sets one, else the board's. F4 removes the key from the file being edited only. With `--no-overlay`, a key that `menus.d/<name>/strings.json` sets still wins for callers, whatever the theme's own file holds. See [Theme Strings](../configuration/configuration.md#theme-strings).
 
 ## Interface
 
@@ -305,6 +309,12 @@ editor and the startup check apply these rules.
 exist, is not a `v3_script` door, is busy, or the file is missing. It is also printed as text, without
 a log entry, before the caller has logged in, and when the caller fails the door's `min_access_level`
 or `acs`. A `!` value met while another string's script is running prints as text too.
+
+The exception is `pauseString`. Before login (the connection matrix, the new-user form and the
+required message to the SysOp at a new user's first login) its script still runs, as a guest: no
+user record, `v3.session.user.id` is `0`, and `v3.user`, `v3.users`, `v3.message`, `v3.file`,
+`v3.oneliners` and `v3.nodes` are not there. Only a door with no `min_access_level` and no `acs`
+runs this way; one with either prints as text before login.
 
 A file name needs an extension, so formatted strings such as `%d of %d` are never mistaken for a
 file. Put a colour code before a leading `!` (`|12!Warning`) rather than after it: `!|` is the

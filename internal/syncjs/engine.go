@@ -11,10 +11,12 @@ package syncjs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,6 +24,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/dop251/goja"
 )
 
@@ -94,7 +97,7 @@ func NewEngine(ctx context.Context, session *SessionContext, cfg SyncJSDoorConfi
 	}
 
 	// Set up interrupt checking — allows context cancellation to halt JS execution
-	go eng.watchContext()
+	safego.Go(safego.KindScriptWatch, session.NodeNumber, eng.watchContext, nil)
 
 	// Register all Synchronet API objects
 	registerConsole(eng.vm, eng)
@@ -125,7 +128,12 @@ func (eng *Engine) Run(scriptPath string) error {
 
 	slog.Info("running SyncJS script", "path", scriptPath, "node", eng.session.NodeNumber)
 
-	_, err = eng.vm.RunScript(scriptPath, stripUseStrict(string(data)))
+	err = eng.runScript(scriptPath, stripUseStrict(string(data)))
+	if errors.Is(err, ErrHostPanic) {
+		// Colours and cursor back, for whatever comes after the door.
+		eng.writeRaw("\x1b[0m\x1b[?25h")
+		return fmt.Errorf("script error: %w", err)
+	}
 	if err != nil {
 		if isExitPanic(err) {
 			return nil
@@ -136,6 +144,22 @@ func (eng *Engine) Run(scriptPath string) error {
 		return fmt.Errorf("script error: %w", err)
 	}
 	return nil
+}
+
+// runScript runs src, turning a Go panic in a host function the script
+// called into an ErrHostPanic error, logged with its stack. goja passes such
+// a panic straight through RunScript, and on a caller's session goroutine it
+// would end the session, or with no recovery above it the board.
+func (eng *Engine) runScript(path, src string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("SyncJS host function panicked",
+				"path", path, "node", eng.session.NodeNumber, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
+			err = fmt.Errorf("%w: %v", ErrHostPanic, r)
+		}
+	}()
+	_, err = eng.vm.RunScript(path, src)
+	return err
 }
 
 // exitHandlerBudget bounds the total wall-clock time the js.on_exit handlers
@@ -174,8 +198,20 @@ func (eng *Engine) runExitHandlers() {
 	finished := make(chan struct{})
 	budgetDone := make(chan struct{})
 	var expired atomic.Bool
-	go func() {
+	safego.Go(safego.KindScriptWatch, eng.session.NodeNumber, func() {
 		defer close(budgetDone)
+		// Without the budget nothing would stop a handler that never
+		// returns, so a panic here spends it at once, before budgetDone
+		// lets the interrupt be cleared.
+		ok := false
+		defer func() {
+			if !ok {
+				expired.Store(true)
+				eng.cancel()
+				eng.vm.Interrupt(ErrTerminated)
+			}
+		}()
+		safego.TestPoint(safego.KindScriptWatch)
 		timer := time.NewTimer(exitHandlerBudget)
 		defer timer.Stop()
 		select {
@@ -185,7 +221,8 @@ func (eng *Engine) runExitHandlers() {
 			eng.vm.Interrupt(ErrTerminated)
 		case <-finished:
 		}
-	}()
+		ok = true
+	}, nil)
 	defer func() {
 		close(finished)
 		<-budgetDone
@@ -303,11 +340,22 @@ func (eng *Engine) close() []byte {
 // cancellation, until stopWatcher is called.
 func (eng *Engine) watchContext() {
 	defer close(eng.watchDone)
+	// Without the watcher nothing would stop a busy script, so a panic here
+	// stops it, before watchDone lets stopWatcher clear the interrupt.
+	finished := false
+	defer func() {
+		if !finished {
+			eng.cancel()
+			eng.vm.Interrupt(ErrTerminated)
+		}
+	}()
+	safego.TestPoint(safego.KindScriptWatch)
 	select {
 	case <-eng.ctx.Done():
 		eng.vm.Interrupt(ErrTerminated)
 	case <-eng.watchStop:
 	}
+	finished = true
 }
 
 // stopWatcher stops watchContext and waits for it to return, so no further
@@ -464,8 +512,9 @@ func (eng *Engine) startReader() {
 				return false
 			}
 		}
-		go func() {
+		safego.Go(safego.KindScriptInput, eng.session.NodeNumber, func() {
 			defer close(eng.copierDone)
+			safego.TestPoint(safego.KindScriptInput)
 			for {
 				buf := make([]byte, 256)
 				n, err := eng.session.Session.Read(buf)
@@ -481,7 +530,7 @@ func (eng *Engine) startReader() {
 					return
 				}
 			}
-		}()
+		}, eng.cancel)
 	})
 }
 

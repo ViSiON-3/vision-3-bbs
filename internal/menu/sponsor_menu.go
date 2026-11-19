@@ -20,6 +20,9 @@ import (
 
 // displaySponsorHeader clears the screen (if configured) and displays the SPONSORM.ANS header.
 func (e *MenuExecutor) displaySponsorHeader(terminal *term.Terminal, menuRec *MenuRecord, outputMode ansi.OutputMode, nodeNumber, termWidth, termHeight int) {
+	if menuRec != nil && menuRec.Script != "" {
+		return // the script draws the whole screen each time round
+	}
 	if menuRec != nil && menuRec.GetClrScrBefore() {
 		_ = terminalio.WriteProcessedBytes(terminal, []byte(ansi.ClearScreen()), outputMode)
 	}
@@ -89,23 +92,44 @@ func runSponsorMenu(c *cmdCtx, args string) (*user.User, string, error) {
 	e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termWidth, termHeight)
 
 	for {
-		if menuRec != nil && menuRec.GetUsePrompt() {
-			if err := e.displayPrompt(s, terminal, menuRec, currentUser, userManager, nodeNumber, "SPONSORM", sessionStartTime, outputMode, ""); err != nil {
-				slog.Warn("displayPrompt failed for SPONSORM", "node", nodeNumber, "error", err)
+		cmd := ""
+		if menuRec != nil && menuRec.Script != "" {
+			ctx := *c
+			ctx.currentUser = currentUser
+			choice, scripted, err := scriptedSponsorChoice(&ctx, menuRec, area.Tag)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return nil, "LOGOFF", io.EOF
+				}
+				return currentUser, "", err
 			}
-		} else {
-			prompt := fmt.Sprintf("\r\n|15[|14%s|15] Sponsor: |11E|07=Edit  |11P|07=Position  |11[|07/|11]|07=Prev/Next  |11Q|07=Quit: ", area.Tag)
-			_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+			if scripted {
+				cmd = choice
+			} else {
+				// The built-in screen takes over for the rest of this visit.
+				menuRec.Script = ""
+				e.displaySponsorHeader(terminal, menuRec, outputMode, nodeNumber, termWidth, termHeight)
+			}
 		}
+		if cmd == "" {
+			if menuRec != nil && menuRec.GetUsePrompt() {
+				if err := e.displayPrompt(s, terminal, menuRec, currentUser, userManager, nodeNumber, "SPONSORM", sessionStartTime, outputMode, ""); err != nil {
+					slog.Warn("displayPrompt failed for SPONSORM", "node", nodeNumber, "error", err)
+				}
+			} else {
+				prompt := fmt.Sprintf("\r\n|15[|14%s|15] Sponsor: |11E|07=Edit  |11P|07=Position  |11[|07/|11]|07=Prev/Next  |11Q|07=Quit: ", area.Tag)
+				_ = terminalio.WriteProcessedBytes(terminal, ansi.ReplacePipeCodes([]byte(prompt)), outputMode)
+			}
 
-		input, err := readLineFromSessionIH(s, terminal)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil, "LOGOFF", io.EOF
+			input, err := readLineFromSessionIH(s, terminal)
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					return nil, "LOGOFF", io.EOF
+				}
+				return currentUser, "", err
 			}
-			return currentUser, "", err
+			cmd = strings.ToUpper(strings.TrimSpace(input))
 		}
-		cmd := strings.ToUpper(strings.TrimSpace(input))
 
 		switch cmd {
 		case "E":

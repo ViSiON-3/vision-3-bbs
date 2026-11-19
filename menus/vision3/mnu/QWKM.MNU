@@ -1,0 +1,16 @@
+{
+    "TITLE": "QWK Offline Mail",
+    "CLR": true,
+    "USEPROMPT": true,
+    "PROMPT1": "",
+    "PROMPT2": "|C5[|C4QWK Mail|C5] |C1Command |C5->|C2 ",
+    "FALLBACK": "MSGMENU",
+    "ACS": "*",
+    "PASS": "",
+    "HELPMENU": "",
+    "FORCEHELPLEVEL": 0,
+    "MES_CONF": 0,
+    "FILE_CONF": 0,
+    "FORCEHOTKEY": false,
+    "SCRIPT": "submenu.js"
+}

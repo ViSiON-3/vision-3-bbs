@@ -19,6 +19,7 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 
 	jsutil.Set(obj, "width", eng.session.ScreenWidth)
 	jsutil.Set(obj, "height", eng.session.ScreenHeight)
+	jsutil.Set(obj, "utf8", eng.session.OutputMode == ansi.OutputModeUTF8)
 
 	// --- Output ---
 
@@ -172,8 +173,12 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 		prompt := argsToString(call)
 		processed := ansi.ReplacePipeCodes([]byte(prompt + " (Y/n)? "))
 		eng.writeRaw(string(processed))
-		key, _ := eng.readKey(0)
-		eng.writeRaw("\r\n")
+		key, err := eng.readKey(0)
+		if err == nil {
+			// A prompt stopped for a notice, or by a hang-up, writes
+			// nothing more.
+			eng.writeRaw("\r\n")
+		}
 		return vm.ToValue(strings.ToUpper(key) != "N")
 	})
 
@@ -182,16 +187,21 @@ func registerConsole(v3 *goja.Object, eng *Engine) {
 		prompt := argsToString(call)
 		processed := ansi.ReplacePipeCodes([]byte(prompt + " (N/y)? "))
 		eng.writeRaw(string(processed))
-		key, _ := eng.readKey(0)
-		eng.writeRaw("\r\n")
+		key, err := eng.readKey(0)
+		if err == nil {
+			// A prompt stopped for a notice, or by a hang-up, writes
+			// nothing more.
+			eng.writeRaw("\r\n")
+		}
 		return vm.ToValue(strings.ToUpper(key) != "Y")
 	})
 
 	// pause() — "press any key" prompt
 	jsutil.Set(obj, "pause", func(call goja.FunctionCall) goja.Value {
 		eng.writeRaw("\r\n[Press any key] ")
-		eng.readKey(0) //nolint:errcheck
-		eng.writeRaw("\r\n")
+		if _, err := eng.readKey(0); err == nil {
+			eng.writeRaw("\r\n") // as yesno: nothing once stopped
+		}
 		return goja.Undefined()
 	})
 

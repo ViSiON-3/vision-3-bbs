@@ -112,6 +112,9 @@ func newBBS(t *testing.T) *bbs {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
+		if e.IsDir() {
+			continue // sources/: definitions v3mail never reads
+		}
 		data, err := configtemplates.FS.ReadFile(e.Name())
 		if err != nil {
 			t.Fatal(err)

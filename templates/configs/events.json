@@ -201,6 +201,20 @@
       "working_directory": "{BBS_ROOT}",
       "timeout_seconds": 3600,
       "enabled": false
+    },
+    {
+      "id": "source_sync",
+      "name": "Source gateway sync",
+      "schedule": "*/15 * * * *",
+      "comment": "Imports the feeds in sources.json, through the logged-in Chrome at chrome_debug_url for browser sources. See docs/sysop/messages/source-gateway.md",
+      "command": "{BBS_ROOT}/helper",
+      "args": [
+        "source",
+        "sync"
+      ],
+      "working_directory": "{BBS_ROOT}",
+      "timeout_seconds": 600,
+      "enabled": false
     }
   ]
 }

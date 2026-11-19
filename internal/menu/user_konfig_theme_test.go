@@ -11,6 +11,7 @@ import (
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor/testterm"
+	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 	"golang.org/x/term"
 )
 
@@ -311,4 +312,175 @@ func TestKonfigThemeRemoved(t *testing.T) {
 	if got := reloadUser(t, um).Theme; got != "" {
 		t.Errorf("Theme = %q after picking the board's, want none", got)
 	}
+}
+
+// A theme copied into menus/ while the board runs is offered in Konfig at
+// once: the list is read from menus/ each time the box opens, with no
+// restart and no reload of the executor.
+func TestKonfigThemeCopiedInWhileRunning(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	e := konfigThemeExecutor(t)
+	screen := runKonfigOn(t, e, um, u, "vq")
+	if !strings.Contains(screen.Row(konfigEditRow), "has one theme, v3") {
+		t.Fatalf("before the copy, status row = %q", screen.Row(konfigEditRow))
+	}
+
+	// The sysop prepares the theme elsewhere and copies it in.
+	src := filepath.Join(t.TempDir(), "glass")
+	for rel, body := range map[string]string{
+		"mnu/MAIN.MNU":     "{}",
+		"theme.json":       "{}",
+		"ansi/KONFIG.ANS":  "GLASS-KONFIG-ART\r\n",
+		"scripts/menu.js":  "",
+		"data/picture.png": "",
+	} {
+		path := filepath.Join(src, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// As the guide says: copy it in under a dot name, which is never
+	// offered, then rename it into place.
+	menus := filepath.Dir(e.MenuSetPath)
+	if err := os.CopyFS(filepath.Join(menus, ".glass.new"), os.DirFS(src)); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.installedThemes(); !slices.Equal(got, []string{"v3"}) {
+		t.Fatalf("a theme being copied in under a dot name is offered: %v", got)
+	}
+	if err := os.Rename(filepath.Join(menus, ".glass.new"), filepath.Join(menus, "glass")); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := e.installedThemes(); !slices.Equal(got, []string{"glass", "v3"}) {
+		t.Fatalf("installed after the copy = %v", got)
+	}
+	screen = runKonfigOn(t, e, um, reloadUser(t, um), "v"+keyUp+"\rq")
+	if got := reloadUser(t, um).Theme; got != "glass" {
+		t.Fatalf("Theme = %q, want glass", got)
+	}
+	if snap := screen.Snapshot(); !strings.Contains(snap, "GLASS-KONFIG-ART") {
+		t.Errorf("Konfig not redrawn in the copied theme:\n%s", snap)
+	}
+}
+
+// Konfig shows each theme by its name: the list, the description of the
+// highlighted theme, the Theme value and the Saved line. The choice saved
+// is the theme's directory.
+func TestKonfigThemeNames(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	e := konfigThemeExecutor(t, "amber", "zed")
+	menus := filepath.Dir(e.MenuSetPath)
+	if err := os.WriteFile(filepath.Join(menus, "amber", "theme.json"),
+		[]byte(`{"name": "Amber Glow", "description": "Warm light on black"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.SetServerConfig(config.ServerConfig{Theme: config.ThemeSelection{Labels: map[string]config.ThemeLabel{
+		"v3": {Name: "V3-Stock", Description: "Stock ViSiON/3 menus, as shipped"},
+	}}})
+
+	screen := runKonfigOn(t, e, um, u, "q")
+	if !strings.Contains(screen.Snapshot(), "[V] Theme           V3-Stock (default)") {
+		t.Errorf("Theme value is not the board theme's name:\n%s", screen.Snapshot())
+	}
+
+	// The box opens on V3-Stock, the board's, with its description; Up
+	// highlights Amber Glow and shows its description; Enter picks it.
+	sess, screen := konfigSessionOn(t, e, um, u, "v"+keyUp+"\rq")
+	raw := sess.out.String()
+	for _, want := range []string{"Amber Glow", "V3-Stock", "zed", "Stock ViSiON/3 menus, as shipped", "Warm light on black"} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("box lacks %q", want)
+		}
+	}
+	if strings.Contains(raw, " amber ") {
+		t.Errorf("box shows the directory name amber")
+	}
+	if got := reloadUser(t, um).Theme; got != "amber" {
+		t.Fatalf("Theme = %q, want the directory amber", got)
+	}
+	if row := screen.Row(konfigEditRow); !strings.Contains(row, "Theme is now Amber Glow") {
+		t.Errorf("Saved line = %q", row)
+	}
+	if !strings.Contains(screen.Snapshot(), "[V] Theme           Amber Glow") {
+		t.Errorf("Theme value after the pick:\n%s", screen.Snapshot())
+	}
+
+	// Renaming the theme keeps the caller's choice: it is the directory.
+	if err := os.WriteFile(filepath.Join(menus, "amber", "theme.json"), []byte(`{"name": "Ember"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	screen = runKonfigOn(t, e, um, reloadUser(t, um), "q")
+	if !strings.Contains(screen.Snapshot(), "[V] Theme           Ember") {
+		t.Errorf("after a rename:\n%s", screen.Snapshot())
+	}
+}
+
+// A description wider than the 36-column box widens it, up to the 60
+// columns a description is shown in, still centred on the 80-column form.
+func TestKonfigThemeBoxFitsDescription(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	e := konfigThemeExecutor(t, "amber")
+	long := strings.Repeat("d", 70)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(e.MenuSetPath), "amber", "theme.json"),
+		[]byte(`{"description": "`+long+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sess, _ := konfigSessionOn(t, e, um, u, "v"+keyUp+keyEsc+"q")
+	raw := sess.out.String()
+	// 64 columns wide and 6 rows high: column (80-64)/2+1 = 9, row
+	// (24-6)/2+1 = 10.
+	if !strings.Contains(raw, moveTo(10, 9)+pc(9)+"┌─") {
+		t.Errorf("box not widened to 64 columns at column 9")
+	}
+	// Cut to 60 columns, its last two "..".
+	if !strings.Contains(raw, strings.Repeat("d", 58)+"..") || strings.Contains(raw, strings.Repeat("d", 59)) {
+		t.Errorf("description not cut to 60 columns")
+	}
+}
+
+// A name with a pipe code prints as typed in the list, the Theme value and
+// the Saved line, and on the only-one line; it never colours them.
+func TestKonfigThemeNamePipesPrintAsTyped(t *testing.T) {
+	um, u := newUserConfigTestUser(t)
+	e := konfigThemeExecutor(t, "amber")
+	if err := os.WriteFile(filepath.Join(filepath.Dir(e.MenuSetPath), "amber", "theme.json"),
+		[]byte(`{"name": "|C1Glass"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sess, screen := konfigSessionOn(t, e, um, u, "v"+keyUp+"\rq")
+	if !strings.Contains(sess.out.String(), " |C1Glass ") {
+		t.Errorf("the themes box does not show |C1Glass as typed")
+	}
+	if row := screen.Row(konfigEditRow); !strings.Contains(row, "Theme is now |C1Glass") {
+		t.Errorf("Saved line = %q", row)
+	}
+	if !strings.Contains(screen.Snapshot(), "[V] Theme           |C1Glass") {
+		t.Errorf("Theme value:\n%s", screen.Snapshot())
+	}
+
+	one := konfigThemeExecutor(t)
+	one.SetServerConfig(config.ServerConfig{Theme: config.ThemeSelection{Labels: map[string]config.ThemeLabel{"v3": {Name: "|C1Stock"}}}})
+	_, screen = konfigSessionOn(t, one, um, reloadUser(t, um), "vq")
+	if row := screen.Row(konfigEditRow); !strings.Contains(row, "has one theme, |C1Stock") {
+		t.Errorf("only-one line = %q", row)
+	}
+}
+
+// konfigSessionOn runs Konfig on an 80 by 24 screen and returns the session,
+// with everything written to it, and the screen.
+func konfigSessionOn(t *testing.T, e *MenuExecutor, um *user.UserMgr, u *user.User, keys string) (*teeSession, *testterm.Term) {
+	t.Helper()
+	screen := testterm.New(80, 24)
+	sess := &teeSession{Session: testterm.NewSession(screen, keys), out: &bytes.Buffer{}}
+	t.Cleanup(func() { resetSessionIH(sess); sessionTermSizes.Delete(sess) })
+	c := &cmdCtx{e: e.ForUser(u), s: sess, terminal: term.NewTerminal(sess, ""), userManager: um, currentUser: u,
+		nodeNumber: 1, outputMode: ansi.OutputModeUTF8, termWidth: 80, termHeight: 24}
+	if _, _, err := runUserKonfig(c, ""); err != nil {
+		t.Fatal(err)
+	}
+	return sess, screen
 }

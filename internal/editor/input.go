@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 )
 
 // ErrIdleTimeout is returned by ReadKeyWithTimeout when no input arrives before
@@ -14,6 +16,9 @@ import (
 // escape-sequence timeout so that callers can handle user-visible idle
 // disconnects without false-positive matches on sequence parsing.
 var ErrIdleTimeout = errors.New("idle timeout")
+
+// ErrReadPoll means a short animation poll elapsed; the session remains live.
+var ErrReadPoll = errors.New("input poll elapsed")
 
 // ErrTimeLimit is returned by a session key read once the caller's time limit
 // has passed (see SetSessionDeadline). It wraps ErrIdleTimeout, so every input
@@ -266,6 +271,23 @@ func (ih *InputHandler) runToastHook(limit time.Duration) (breakIn bool) {
 	return breakIn
 }
 
+// ServicePendingBreakIn runs the break-in hook for a break-in that ended a
+// WaitFor and that no read has serviced yet, as the read that ran the toast
+// hook would. Code that waits outside a key read, such as a toast shown
+// between two runs of a menu script, calls it once its waits are over. ran
+// reports whether the hook ran. Call from the reading goroutine.
+func (ih *InputHandler) ServicePendingBreakIn() (ran bool) {
+	if !ih.breakInPending {
+		return false
+	}
+	ih.breakInPending = false
+	if ih.breakInFn == nil {
+		return false
+	}
+	ih.runBreakIn()
+	return true
+}
+
 // interruptChan returns the channel Interrupt sends on.
 func (ih *InputHandler) interruptChan() chan struct{} {
 	ih.interruptOnce.Do(func() { ih.interrupt = make(chan struct{}, 1) })
@@ -315,10 +337,15 @@ const (
 	WaitInterrupted
 )
 
-// WaitFor is WaitForInput, reporting what ended the wait.
+// WaitFor is WaitForInput, reporting what ended the wait. With d of 0 or less
+// it does not wait: it reports input or an interruption already waiting, or
+// WaitElapsed.
 func (ih *InputHandler) WaitFor(d time.Duration) WaitOutcome {
 	if len(ih.unreadBuf) > 0 {
 		return WaitInput
+	}
+	if d <= 0 {
+		return ih.pollWait()
 	}
 	timer := time.NewTimer(d)
 	defer timer.Stop()
@@ -340,6 +367,31 @@ func (ih *InputHandler) WaitFor(d time.Duration) WaitOutcome {
 			return WaitInterrupted
 		case <-ih.interruptChan():
 			return WaitInterrupted
+		}
+	}
+}
+
+// pollWait is WaitFor with no time to wait. A timer that has already run out
+// would leave the select to pick at random between it and a waiting key.
+func (ih *InputHandler) pollWait() WaitOutcome {
+	for {
+		select {
+		case b, ok := <-ih.incoming:
+			if !ok {
+				return WaitInput
+			}
+			if ih.lateEnterTrailer(b) {
+				continue
+			}
+			ih.unreadByte(b)
+			return WaitInput
+		case <-ih.breakInChan(true):
+			ih.breakInPending = true
+			return WaitInterrupted
+		case <-ih.interruptChan():
+			return WaitInterrupted
+		default:
+			return WaitElapsed
 		}
 	}
 }
@@ -524,20 +576,8 @@ func (ih *InputHandler) sessionIdleTimeout() time.Duration {
 // NewInputHandler creates a new input handler.
 // A goroutine is started to read from input; it exits when input returns an error.
 func NewInputHandler(input io.Reader) *InputHandler {
-	ih := &InputHandler{
-		incoming: make(chan byte, 256),
-		done:     make(chan struct{}),
-	}
-
-	// If the reader supports read interruption (ssh/telnet adapters do),
-	// wire one in so Close() can stop the background goroutine cleanly.
-	if ri, ok := input.(interface{ SetReadInterrupt(<-chan struct{}) }); ok {
-		ih.readInterrupt = make(chan struct{})
-		ih.setReadInterrupt = ri.SetReadInterrupt
-		ih.setReadInterrupt(ih.readInterrupt)
-	}
-
-	go func() {
+	ih := newInputHandler(input)
+	safego.Go(safego.KindInput, input, func() {
 		// Defers run LIFO: setReadInterrupt(nil) first, then close(incoming),
 		// then close(done). Callers waiting on done are guaranteed that the
 		// session's readInterrupt has already been cleared before they unblock.
@@ -546,6 +586,7 @@ func NewInputHandler(input io.Reader) *InputHandler {
 		if ih.setReadInterrupt != nil {
 			defer ih.setReadInterrupt(nil)
 		}
+		safego.TestPoint(safego.KindInput)
 
 		buf := [1]byte{}
 		for {
@@ -557,7 +598,23 @@ func NewInputHandler(input io.Reader) *InputHandler {
 				return
 			}
 		}
-	}()
+	}, nil)
+	return ih
+}
+
+// newInputHandler returns a handler with no reading goroutine yet. If input
+// supports read interruption (ssh/telnet adapters do), one is wired in so
+// Close() can stop the goroutine cleanly.
+func newInputHandler(input io.Reader) *InputHandler {
+	ih := &InputHandler{
+		incoming: make(chan byte, 256),
+		done:     make(chan struct{}),
+	}
+	if ri, ok := input.(interface{ SetReadInterrupt(<-chan struct{}) }); ok {
+		ih.readInterrupt = make(chan struct{})
+		ih.setReadInterrupt = ri.SetReadInterrupt
+		ih.setReadInterrupt(ih.readInterrupt)
+	}
 	return ih
 }
 
@@ -1033,6 +1090,20 @@ func isTimeoutError(err error) bool {
 // ReadKey reads a single key, handling escape sequences.
 // Returns an integer code (may be > 255 for special keys).
 func (ih *InputHandler) ReadKey() (int, error) {
+	for {
+		key, err := ih.readKeyOnce()
+		if err != nil || key != keyReplySkipped {
+			return key, err
+		}
+	}
+}
+
+// keyReplySkipped is readKeyOnce's result for a terminal's device
+// attributes reply, which is not a key (see ReplyTrap): ReadKey reads on.
+const keyReplySkipped = -1
+
+// readKeyOnce is ReadKey for one key or one skipped reply.
+func (ih *InputHandler) readKeyOnce() (int, error) {
 	b, err := ih.readByte()
 	if err != nil {
 		return 0, err
@@ -1101,6 +1172,53 @@ func (ih *InputHandler) ReadKeyWithTimeout(idleTimeout time.Duration) (int, erro
 	return ih.ReadKey()
 }
 
+// ReadKeyWithPoll waits at most poll for a key without restarting the session
+// idle countdown. The caller retains idleStart across polls and resets it only
+// after input. Session deadlines, break-ins, disconnects and escape decoding
+// follow the normal ReadKey path.
+func (ih *InputHandler) ReadKeyWithPoll(poll time.Duration, idleStart time.Time) (int, error) {
+	if poll <= 0 {
+		return ih.ReadKey()
+	}
+	end := time.Now().Add(poll)
+	for {
+		if failure := ih.Failure(); failure != nil {
+			return 0, failure
+		}
+		if len(ih.unreadBuf) > 0 {
+			return ih.ReadKey()
+		}
+		wait, onTimeout, expired := ih.keyWait(idleStart)
+		if expired {
+			return 0, onTimeout
+		}
+		remaining := time.Until(end)
+		if remaining <= 0 {
+			return 0, ErrReadPoll
+		}
+		if wait == 0 || remaining < wait {
+			wait = remaining
+		}
+		b, broke, err := ih.waitByte(wait, true)
+		if broke {
+			ih.runBreakIn()
+			continue
+		}
+		if isTimeoutError(err) {
+			_, sessionErr, sessionExpired := ih.keyWait(idleStart)
+			if sessionExpired {
+				return 0, sessionErr
+			}
+			return 0, ErrReadPoll
+		}
+		if err != nil {
+			return 0, err
+		}
+		ih.unreadByte(b)
+		return ih.ReadKey()
+	}
+}
+
 // parseCSISequence parses ANSI CSI escape sequences (ESC [ ...).
 // '[' has already been consumed by ReadKey before this is called.
 func (ih *InputHandler) parseCSISequence() (int, error) {
@@ -1137,6 +1255,10 @@ func (ih *InputHandler) parseCSISequence() (int, error) {
 
 	if key := CSIKey(sequence[:len(sequence)-1], sequence[len(sequence)-1]); key != 0 {
 		return key, nil
+	}
+	// A terminal's device attributes reply is not a key (see ReplyTrap).
+	if IsReplyCSI(sequence) {
+		return keyReplySkipped, nil
 	}
 	return int(KeyEsc), nil
 }

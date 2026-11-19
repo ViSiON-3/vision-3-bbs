@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/syncjs"
 )
 
@@ -84,13 +85,14 @@ func executeSyncJSDoor(ctx *DoorCtx) error {
 	engineCtx, engineCancel := context.WithCancel(ctx.Session.Context())
 	defer engineCancel()
 	// The script ends when the BBS must end the door (see door_watch.go).
-	go func() {
+	safego.Go(safego.KindDoorWatch, ctx.NodeNumber, func() {
+		safego.TestPoint(safego.KindDoorWatch)
 		select {
 		case <-ctx.watch.Ended():
 			engineCancel()
 		case <-engineCtx.Done():
 		}
-	}()
+	}, engineCancel)
 
 	eng := syncjs.NewEngine(engineCtx, session, cfg)
 	if ctx.takeDoorEnterTrailer() {

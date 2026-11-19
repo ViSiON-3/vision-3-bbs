@@ -68,6 +68,18 @@ type ThemeConfig struct {
 	// and merges as one value. Read it through FadeColors, which falls back
 	// to the default ramp for a value it cannot use.
 	ToastFadeColors string `json:"toastFadeColors"`
+	// MenuScript names a v3_script door that draws every menu of the set
+	// that has no SCRIPT of its own in its .MNU: the door's code, then any
+	// words to pass it as arguments ("MENUS dark"). Empty means menus show
+	// their screens.
+	MenuScript string `json:"menuScript,omitempty"`
+	// Name and Description are how the theme is shown where callers choose
+	// one: a name for lists and Konfig's Theme value, and one line of
+	// at most MaxThemeDescription columns. Read them through ThemeLabelFor,
+	// which applies the board's theme.labels and falls back to the
+	// directory name.
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
 	// Add other theme elements here as needed (e.g., default menu colors)
 }
 

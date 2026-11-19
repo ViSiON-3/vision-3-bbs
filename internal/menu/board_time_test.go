@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/config"
 	"github.com/ViSiON-3/vision-3-bbs/internal/message"
 )
 
@@ -85,6 +86,17 @@ func TestReplyQuoteDateInBoardZone(t *testing.T) {
 	}
 	t.Setenv("VISION3_MENU_PATH", t.TempDir())
 	t.Setenv("VISION3_CONFIG_PATH", configDir)
+	// The editor prints the session's strings, as the board loaded them.
+	loaded, err := config.LoadStrings(configDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env.e.SetStrings(loaded)
+	// The file on disk now says something else, so the banner shows the
+	// editor used the session's strings rather than reading the file.
+	if err := os.WriteFile(filepath.Join(configDir, "strings.json"), []byte(`{"quoteTop": "[disk]", "quoteBottom": "[disk]"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	r := env.runCmd("READMSGS", env.caller, "", "R\x11 \x11\x1aQ")
 	if !r.has("Reply posted successfully!") {

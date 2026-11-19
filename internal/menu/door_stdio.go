@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/gliderlabs/ssh"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 )
 
 // doorOutputDrainTimeout bounds how long a door's remaining output is relayed
@@ -66,10 +68,12 @@ func runStdioDoor(ctx *DoorCtx, cmd *exec.Cmd) error {
 	inputDone := make(chan struct{})
 	var left doorInputCopy // set by the input goroutine, for after inputDone
 	trailer := ctx.takeDoorEnterTrailer()
-	go func() {
+	safego.Go(safego.KindDoorIO, ctx.NodeNumber, func() {
 		defer close(inputDone)
 		// Closing the pipe when the session ends gives the door end-of-file.
 		defer func() { _ = stdinW.Close() }() // best-effort pipe teardown
+		defer ctx.endDoorIfPanicking()
+		safego.TestPoint(safego.KindDoorIO)
 		var err error
 		left, err = copyDoorInput(stdinW, ctx.Session, readInterrupt, trailer)
 		if err != nil && !errors.Is(err, os.ErrClosed) && !errors.Is(err, syscall.EPIPE) {
@@ -79,7 +83,7 @@ func runStdioDoor(ctx *DoorCtx, cmd *exec.Cmd) error {
 				slog.Warn("error copying session stdin to door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
 			}
 		}
-	}()
+	}, nil)
 
 	cmdErr := cmd.Wait()
 	stopDoorWatch()

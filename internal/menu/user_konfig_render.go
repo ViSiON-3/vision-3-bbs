@@ -7,10 +7,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/mattn/go-runewidth"
+	"github.com/rivo/uniseg"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
 )
@@ -51,20 +52,42 @@ func toneColor(t konfigTone) string {
 // in two cells. A CP437 session has none: every character is one cell.
 func (st *konfigState) wideCells() bool { return st.c.outputMode != ansi.OutputModeCP437 }
 
-// cells is the number of terminal cells s takes.
+// cells is the number of terminal cells s takes: by grapheme cluster on a
+// terminal with wide cells, as uniseg measures them, so an emoji with VS16
+// or a joined emoji counts as the terminal draws it.
 func (st *konfigState) cells(s string) int {
 	if st.wideCells() {
-		return runewidth.StringWidth(s)
+		return uniseg.StringWidth(s)
 	}
 	return utf8.RuneCountInString(s)
 }
 
-// clip cuts s to at most n cells, ending it with ellipsis when it had to cut.
+// clip cuts s to at most n cells, ending it with ellipsis when it had to
+// cut. It cuts between whole characters (grapheme clusters).
 func (st *konfigState) clip(s string, n int, ellipsis string) string {
-	if st.wideCells() {
-		return runewidth.Truncate(s, n, ellipsis)
+	if !st.wideCells() {
+		return ansi.TruncateRunes(s, n, ellipsis)
 	}
-	return ansi.TruncateRunes(s, n, ellipsis)
+	if uniseg.StringWidth(s) <= n {
+		return s
+	}
+	room := n - uniseg.StringWidth(ellipsis)
+	if room < 0 {
+		return ""
+	}
+	var b strings.Builder
+	w := 0
+	for rest := s; rest != ""; {
+		var cluster string
+		var cw int
+		cluster, rest, cw, _ = uniseg.FirstGraphemeClusterInString(rest, -1)
+		if w+cw > room {
+			break
+		}
+		b.WriteString(cluster)
+		w += cw
+	}
+	return b.String() + ellipsis
 }
 
 // fit pads or cuts s to exactly n cells.
@@ -78,10 +101,6 @@ func (st *konfigState) fit(s string, n int) string {
 
 func (st *konfigState) raw(s string) error {
 	return terminalio.WriteProcessedBytes(st.c.terminal, []byte(s), st.c.outputMode)
-}
-
-func (st *konfigState) pipe(s string) error {
-	return st.raw(string(ansi.ReplacePipeCodes([]byte(s))))
 }
 
 func moveTo(row, col int) string { return fmt.Sprintf("\x1b[%d;%dH", row, col) }
@@ -191,12 +210,27 @@ func (st *konfigState) renderItem(i int) error {
 }
 
 func (st *konfigState) renderHelp() error {
+	if st.helpRow() == 0 {
+		return nil
+	}
 	return st.raw(clearRow(st.helpRow()) + moveTo(st.helpRow(), 2) +
 		st.line("|07"+st.items[st.sel].help) + konfigReset)
 }
 
-// renderStatus shows st.status on the edit row, or clears it.
+// boxStatus is st.status as a box's blank row shows it, inner cells wide.
+func (st *konfigState) boxStatus(inner int) string {
+	text := ansi.StripAnsi(string(ansi.ReplacePipeCodes([]byte(st.status))))
+	return konfigReset + pc(15) + st.fit(" "+text, inner)
+}
+
+// renderStatus shows st.status on the edit row, or clears it. On a screen
+// a script draws it does nothing: the box editors that call it may cover
+// the script's prompt row, and the status reaches the script as its
+// notice when the editor returns.
 func (st *konfigState) renderStatus() error {
+	if st.place != nil || st.editRow() == 0 {
+		return nil
+	}
 	if st.status == "" {
 		return st.raw(clearRow(st.editRow()))
 	}
@@ -214,7 +248,11 @@ func (st *konfigState) line(s string) string {
 
 // clipRow cuts text whose codes are already expanded to the width of a row,
 // keeping its escape sequences.
-func (st *konfigState) clipRow(out string) string {
+func (st *konfigState) clipRow(out string) string { return st.clipCells(out, konfigLineWidth) }
+
+// clipCells cuts text whose codes are already expanded to n screen cells,
+// keeping its escape sequences.
+func (st *konfigState) clipCells(out string, n int) string {
 	var b strings.Builder
 	w := 0
 	for i := 0; i < len(out); {
@@ -231,17 +269,18 @@ func (st *konfigState) clipRow(out string) string {
 			i = j
 			continue
 		}
-		r, size := utf8.DecodeRuneInString(out[i:])
-		rw := 1
-		if st.wideCells() {
-			rw = runewidth.RuneWidth(r)
+		// A whole character (grapheme cluster) at a time; a control
+		// character such as ESC always starts a new one.
+		cluster, _, cw, _ := uniseg.FirstGraphemeClusterInString(out[i:], -1)
+		if !st.wideCells() {
+			cw = utf8.RuneCountInString(cluster)
 		}
-		if w+rw > konfigLineWidth {
+		if w+cw > n {
 			break
 		}
-		b.WriteString(out[i : i+size])
-		w += rw
-		i += size
+		b.WriteString(cluster)
+		w += cw
+		i += len(cluster)
 	}
 	return b.String()
 }
@@ -254,12 +293,25 @@ func (st *konfigState) showCursor(on bool) {
 	}
 }
 
+// minScriptField is the narrowest script field readField edits in place:
+// the widest character the terminal draws and the cursor after it. On a
+// terminal with wide cells the widest is four (U+2E3B, as uniseg measures
+// it); on CP437 every character is one.
+func (st *konfigState) minScriptField() int {
+	if st.wideCells() {
+		return 5
+	}
+	return 2
+}
+
 // konfigMinFieldWidth is the least room readField leaves for typing.
 const konfigMinFieldWidth = 10
 
-// readField edits a single line of text on the edit row, starting from
-// initial. ok is false when the caller pressed Esc. mask shows the text as
-// asterisks; hint is drawn after the box. A value longer than the room left
+// readField edits a single line of text on the edit row, or in the field a
+// script gave for the setting (st.place) with the label on the edit row,
+// starting from initial. ok is false when the caller pressed Esc. mask
+// shows the text as asterisks; hint is drawn after the box, or after the
+// label when the box is in the script's field. A value longer than the room left
 // on the row scrolls sideways to keep the cursor in view, so maxLen is never
 // limited by the screen.
 //
@@ -270,19 +322,77 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 	cur, off := len(buf), 0
 	// A configured label can be any length; keep room on the row to type.
 	label = st.clip(label, konfigLineWidth-2-konfigMinFieldWidth, "..")
-	boxCol := 2 + st.cells(label) + 2
+	if err := st.ensurePromptRow(); err != nil {
+		return "", false, err
+	}
+	f := st.scriptField()
+	if f != nil && st.fieldWidth(f, maxLen) < st.minScriptField() {
+		// Too narrow to show any character and the cursor: edit on the
+		// prompt row instead.
+		f = nil
+		if st.editRow() == 0 {
+			if err := st.promptOnClearScreen(); err != nil {
+				return "", false, err
+			}
+		}
+	}
+	if f != nil && st.editRow() == 0 && !st.fitsBesideField(f, label, hint, maxLen) {
+		// No prompt row, and no room for the label left of the field or
+		// for the hint right of it.
+		if err := st.promptOnClearScreen(); err != nil {
+			return "", false, err
+		}
+		f = nil
+	}
+	boxRow, boxCol := st.editRow(), 2+st.cells(label)+2
 	width := maxLen + 1
 	if room := 80 - boxCol; width > room {
 		width = room
 	}
+	hintRow, hintCol := boxRow, boxCol+width+1
 
-	if err := st.raw(clearRow(st.editRow()) + moveTo(st.editRow(), 2) +
-		pc(15) + label + pc(8) + ": "); err != nil {
-		return "", false, err
+	if f != nil {
+		// The script shows the field; the label and hint go on the prompt
+		// row, or without one just left of the field.
+		boxRow, boxCol = f.Y, f.X
+		width = st.fieldWidth(f, maxLen)
+		hintRow, hintCol = st.editRow(), 2+st.textCells(label)+3
+		if hintRow == 0 && hint != "" {
+			hintCol = boxCol + width + 1
+			text := string(ansi.ReplacePipeCodes([]byte(hint)))
+			if err := st.raw(moveTo(boxRow, hintCol) + text + konfigReset); err != nil {
+				return "", false, err
+			}
+		}
+		if hintRow == 0 {
+			// Beside the field. A longer label drawn there by an earlier
+			// prompt of the same editor is blanked where this one is shorter.
+			from := boxCol - st.textCells(label) - 2
+			blank := ""
+			if prev := st.place.labelFrom; prev > 0 && prev < from {
+				blank = moveTo(boxRow, prev) + konfigReset + strings.Repeat(" ", from-prev)
+			}
+			if st.place.labelFrom == 0 || from < st.place.labelFrom {
+				st.place.labelFrom = from
+			}
+			if err := st.raw(blank + moveTo(boxRow, from) +
+				pc(15) + label + pc(8) + ": "); err != nil {
+				return "", false, err
+			}
+		}
 	}
-	if hint != "" {
-		if err := st.pipe(moveTo(st.editRow(), boxCol+width+1) + hint + "|07"); err != nil {
+	if hintRow > 0 {
+		if err := st.raw(clearRow(hintRow) + moveTo(hintRow, 2) +
+			pc(15) + label + pc(8) + ": "); err != nil {
 			return "", false, err
+		}
+		if room := st.width() - hintCol + 1; hint != "" && room > 0 {
+			// Clipped to the row, so a long translation cannot wrap onto
+			// the next one.
+			text := st.clipCells(string(ansi.ReplacePipeCodes([]byte(hint))), room)
+			if err := st.raw(moveTo(hintRow, hintCol) + text + konfigReset); err != nil {
+				return "", false, err
+			}
 		}
 	}
 
@@ -295,22 +405,11 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 				return err
 			}
 		}
-		if cur < off {
-			off = cur
-		}
-		if cur-off >= width {
-			off = cur - width + 1
-		}
-		end := off + width
-		if end > len(buf) {
-			end = len(buf)
-		}
-		shown := string(buf[off:end])
-		if mask {
-			shown = strings.Repeat("*", end-off)
-		}
-		return st.raw(moveTo(st.editRow(), boxCol) + konfigFieldStyle + shown +
-			strings.Repeat(" ", width-(end-off)) + konfigReset + moveTo(st.editRow(), boxCol+cur-off))
+		var shown string
+		var used, at int
+		off, shown, used, at = st.fieldView(buf, cur, off, width, mask)
+		return st.raw(moveTo(boxRow, boxCol) + konfigFieldStyle + shown +
+			strings.Repeat(" ", width-used) + konfigReset + moveTo(boxRow, boxCol+at))
 	}
 
 	st.showCursor(true)
@@ -331,13 +430,15 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 			return string(buf), true, nil
 		case editor.KeyEsc:
 			return "", false, nil
+		// Moves and deletions take a whole character as fieldView draws
+		// it, so the cursor is never inside one.
 		case editor.KeyArrowLeft:
 			if cur > 0 {
-				cur--
+				cur, _ = st.fieldUnitAt(buf, cur-1, mask)
 			}
 		case editor.KeyArrowRight:
 			if cur < len(buf) {
-				cur++
+				_, cur = st.fieldUnitAt(buf, cur, mask)
 			}
 		case editor.KeyHome:
 			cur = 0
@@ -345,12 +446,15 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 			cur = len(buf)
 		case editor.KeyBackspace, editor.KeyDelete:
 			if cur > 0 {
-				buf = append(buf[:cur-1], buf[cur:]...)
-				cur--
+				from, _ := st.fieldUnitAt(buf, cur-1, mask)
+				buf = append(buf[:from], buf[cur:]...)
+				cur = st.unitStart(buf, from, mask)
 			}
 		case editor.KeyDeleteKey:
 			if cur < len(buf) {
-				buf = append(buf[:cur], buf[cur+1:]...)
+				_, to := st.fieldUnitAt(buf, cur, mask)
+				buf = append(buf[:cur], buf[to:]...)
+				cur = st.unitStart(buf, cur, mask)
 			}
 		case 0x15, editor.KeyCtrlY: // Ctrl-U, Ctrl-Y
 			buf, cur = buf[:0], 0
@@ -375,6 +479,12 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 			}
 			buf = append(buf[:cur], append([]rune{r}, buf[cur:]...)...)
 			cur++
+			// A rune that joins the character after it (a regional
+			// indicator before another) leaves cur inside one; put the
+			// cursor after the whole character.
+			if from, to := st.fieldUnitAt(buf, cur, mask); from < cur {
+				cur = to
+			}
 		}
 		if err := draw(); err != nil {
 			return "", false, err
@@ -382,12 +492,174 @@ func (st *konfigState) readField(label, initial string, maxLen int, mask bool, h
 	}
 }
 
-// readChoice shows prompt on the edit row and waits for one of keys (upper
-// case). It returns 0 for Esc, Enter or Q.
+// fieldWidth is the width of the box readField draws in field f for a
+// value of up to maxLen characters.
+func (st *konfigState) fieldWidth(f *scripting.FieldPos, maxLen int) int {
+	width := maxLen + 1
+	if f.Width > 0 {
+		width = f.Width
+	}
+	return max(min(width, st.width()-f.X+1), 1)
+}
+
+// fitsBesideField reports whether label fits left of field f and hint, if
+// any, right of its box, for an editor with no prompt row.
+func (st *konfigState) fitsBesideField(f *scripting.FieldPos, label, hint string, maxLen int) bool {
+	if f.X-1 < st.textCells(label)+2 {
+		return false
+	}
+	if hint == "" {
+		return true
+	}
+	room := st.width() - (f.X + st.fieldWidth(f, maxLen) + 1) + 1
+	return st.cells(ansi.StripAnsi(string(ansi.ReplacePipeCodes([]byte(hint))))) <= room
+}
+
+// fieldUnit is one character as a field draws it: the runes from..to of
+// the text, taking cells cells.
+type fieldUnit struct{ from, to, cells int }
+
+// fieldUnits splits text into what the terminal draws as one character: a
+// grapheme cluster on a terminal with wide cells, otherwise (CP437, or a
+// masked field) each rune in one cell.
+func (st *konfigState) fieldUnits(text []rune, mask bool) []fieldUnit {
+	units := make([]fieldUnit, 0, len(text))
+	if mask || !st.wideCells() {
+		for i := range text {
+			units = append(units, fieldUnit{i, i + 1, 1})
+		}
+		return units
+	}
+	rest, at := string(text), 0
+	for rest != "" {
+		var cluster string
+		var w int
+		cluster, rest, w, _ = uniseg.FirstGraphemeClusterInString(rest, -1)
+		n := utf8.RuneCountInString(cluster)
+		units = append(units, fieldUnit{at, at + n, w})
+		at += n
+	}
+	return units
+}
+
+// fieldUnitAt is the runes from..to of the character holding rune i of
+// text, as fieldUnits splits it.
+func (st *konfigState) fieldUnitAt(text []rune, i int, mask bool) (from, to int) {
+	for _, u := range st.fieldUnits(text, mask) {
+		if i < u.to {
+			return u.from, u.to
+		}
+	}
+	return len(text), len(text)
+}
+
+// unitStart is i, or the start of the character holding it when a
+// deletion has joined the characters either side of i into one (two
+// regional indicators that were apart make a flag).
+func (st *konfigState) unitStart(text []rune, i int, mask bool) int {
+	if from, _ := st.fieldUnitAt(text, i, mask); from < i {
+		return from
+	}
+	return i
+}
+
+// textCells is the cells s takes as a field measures it (fieldUnits), so a
+// label drawn beside a field is measured as the field's own text is.
+func (st *konfigState) textCells(s string) int {
+	n := 0
+	for _, u := range st.fieldUnits([]rune(s), false) {
+		n += u.cells
+	}
+	return n
+}
+
+// fieldView is what a field width cells wide shows of text with the cursor
+// at rune cur and the view starting at rune off: the new off, scrolled so
+// the text before the cursor and the cursor's own cell fit; the text shown
+// (asterisks when masked) and the cells it takes; and the cursor's cell
+// offset in the field. Whole characters are shown, so the text shown and
+// the cursor agree on where each one is.
+func (st *konfigState) fieldView(text []rune, cur, off, width int, mask bool) (newOff int, shown string, used, at int) {
+	units := st.fieldUnits(text, mask)
+	// unitAt is the unit holding rune i, or len(units) at the end.
+	unitAt := func(i int) int {
+		for u, un := range units {
+			if i < un.to {
+				return u
+			}
+		}
+		return len(units)
+	}
+	span := func(a, b int) int {
+		n := 0
+		for _, un := range units[a:b] {
+			n += un.cells
+		}
+		return n
+	}
+	ci, oi := unitAt(cur), unitAt(off)
+	if ci < oi {
+		oi = ci
+	}
+	// The cursor's cell: the whole character under it, or one at the end.
+	cursorCells := 1
+	if ci < len(units) {
+		cursorCells = max(units[ci].cells, 1)
+	}
+	for oi < ci && span(oi, ci)+cursorCells > width {
+		oi++
+	}
+	ei := oi
+	for ei < len(units) && used+units[ei].cells <= width {
+		used += units[ei].cells
+		ei++
+	}
+	newOff = len(text)
+	if oi < len(units) {
+		newOff = units[oi].from
+	}
+	if ei > oi {
+		shown = string(text[units[oi].from:units[ei-1].to])
+		if mask {
+			shown = strings.Repeat("*", ei-oi)
+		}
+	}
+	return newOff, shown, used, span(oi, ci)
+}
+
+// readChoice shows prompt on the edit row, or at the script's field for
+// the setting when there is no edit row and the whole prompt fits there,
+// and waits for one of keys (upper case). It returns 0 for Esc, Enter or Q.
 func (st *konfigState) readChoice(prompt, keys string) (byte, error) {
+	if err := st.ensurePromptRow(); err != nil {
+		return 0, err
+	}
+	if f := st.scriptField(); f != nil && st.editRow() == 0 {
+		room := st.width() - f.X + 1
+		if f.Width > 0 {
+			room = min(room, f.Width)
+		}
+		text := string(ansi.ReplacePipeCodes([]byte(prompt + "|07")))
+		if n := st.cells(ansi.StripAnsi(text)); n <= room {
+			// Blank the rest of the field, so none of the value the
+			// script drew there shows after the choice.
+			if err := st.raw(moveTo(f.Y, f.X) + text + konfigReset + strings.Repeat(" ", room-n)); err != nil {
+				return 0, err
+			}
+			return st.readChoiceKey(keys)
+		}
+		if err := st.promptOnClearScreen(); err != nil {
+			return 0, err
+		}
+	}
 	if err := st.raw(clearRow(st.editRow()) + moveTo(st.editRow(), 2) + st.line(prompt+"|07")); err != nil {
 		return 0, err
 	}
+	return st.readChoiceKey(keys)
+}
+
+// readChoiceKey waits for one of keys (upper case), 0 for Esc, Enter or Q.
+func (st *konfigState) readChoiceKey(keys string) (byte, error) {
 	for {
 		key, err := st.ih.ReadKey()
 		if err != nil {
@@ -514,7 +786,12 @@ func editFileColumns(st *konfigState) error {
 				return err
 			}
 		}
-		if err := st.renderStatus(); err != nil {
+		if st.place != nil {
+			// A script draws the screen: the status goes in the box.
+			if err := st.raw(line(hintRow, st.boxStatus(inner))); err != nil {
+				return err
+			}
+		} else if err := st.renderStatus(); err != nil {
 			return err
 		}
 	}
@@ -741,7 +1018,12 @@ func editColors(st *konfigState) error {
 		if err := st.raw(drawSlots() + drawPicker()); err != nil {
 			return err
 		}
-		if err := st.renderStatus(); err != nil {
+		if st.place != nil {
+			// A script draws the screen: the status goes in the box.
+			if err := st.raw(line(top+1+user.ColorSlots, st.boxStatus(inner))); err != nil {
+				return err
+			}
+		} else if err := st.renderStatus(); err != nil {
 			return err
 		}
 	}

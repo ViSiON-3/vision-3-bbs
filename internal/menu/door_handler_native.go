@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/winch"
 	"github.com/creack/pty"
@@ -215,7 +216,8 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			// Drain window resize events but don't apply them - respect user's saved preferences.
 			// resizeStop is closed after cmd.Wait() to prevent this goroutine from leaking.
 			resizeStop := make(chan struct{})
-			go func() {
+			safego.Go(safego.KindResize, ctx.NodeNumber, func() {
+				safego.TestPoint(safego.KindResize)
 				for {
 					select {
 					case win, ok := <-winChOrig:
@@ -228,7 +230,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 						return
 					}
 				}
-			}()
+			}, nil)
 
 			var originalState *term.State
 			var rawErr error
@@ -259,8 +261,10 @@ func executeNativeDoor(ctx *DoorCtx) error {
 			outputDone := make(chan struct{})
 			var left doorInputCopy // set by the input goroutine, for after inputDone
 			trailer := ctx.takeDoorEnterTrailer()
-			go func() {
+			safego.Go(safego.KindDoorIO, ctx.NodeNumber, func() {
 				defer close(inputDone)
+				defer ctx.endDoorIfPanicking()
+				safego.TestPoint(safego.KindDoorIO)
 				var err error
 				left, err = copyDoorInput(ptmx, ctx.Session, readInterrupt, trailer)
 				if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
@@ -271,9 +275,11 @@ func executeNativeDoor(ctx *DoorCtx) error {
 						slog.Warn("error copying session stdin to PTY for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
 					}
 				}
-			}()
-			go func() {
+			}, nil)
+			safego.Go(safego.KindDoorIO, ctx.NodeNumber, func() {
 				defer close(outputDone)
+				defer ctx.endDoorIfPanicking()
+				safego.TestPoint(safego.KindDoorIO)
 				_, err := io.Copy(ctx.Session, ptmx)
 				if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) && !errors.Is(err, os.ErrDeadlineExceeded) {
 					// EIO is how a PTY master reports that the door side has closed
@@ -283,7 +289,7 @@ func executeNativeDoor(ctx *DoorCtx) error {
 						slog.Warn("error copying PTY stdout to session for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
 					}
 				}
-			}()
+			}, nil)
 
 			// Wait for door to exit, then cleanly shut down I/O goroutines
 			cmdErr = cmd.Wait()
@@ -363,8 +369,10 @@ func executeNativeDoor(ctx *DoorCtx) error {
 				outputDone := make(chan struct{})
 				var left doorInputCopy // set by the input goroutine, for after inputDone
 				trailer := ctx.takeDoorEnterTrailer()
-				go func() {
+				safego.Go(safego.KindDoorIO, ctx.NodeNumber, func() {
 					defer close(inputDone)
+					defer ctx.endDoorIfPanicking()
+					safego.TestPoint(safego.KindDoorIO)
 					var err error
 					left, err = copyDoorInput(bbsSock, ctx.Session, readInterrupt, trailer)
 					if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) {
@@ -372,14 +380,16 @@ func executeNativeDoor(ctx *DoorCtx) error {
 							slog.Warn("socket I/O input error for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
 						}
 					}
-				}()
-				go func() {
+				}, nil)
+				safego.Go(safego.KindDoorIO, ctx.NodeNumber, func() {
 					defer close(outputDone)
+					defer ctx.endDoorIfPanicking()
+					safego.TestPoint(safego.KindDoorIO)
 					_, err := io.Copy(ctx.Session, bbsSock)
 					if err != nil && err != io.EOF && !errors.Is(err, os.ErrClosed) && !errors.Is(err, os.ErrDeadlineExceeded) {
 						slog.Warn("socket I/O output error for door", "node", ctx.NodeNumber, "door", ctx.DoorName, "error", err)
 					}
-				}()
+				}, nil)
 
 				cmdErr = cmd.Wait()
 				stopDoorWatch()

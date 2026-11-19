@@ -114,6 +114,22 @@ func TestMembershipDialogWithoutRolesJSON(t *testing.T) {
 	}
 }
 
+// No two fields on the edit screen share a position, and the membership
+// summary of a user with none reads "(none)".
+func TestMembershipFieldPlacement(t *testing.T) {
+	at := map[[2]int]string{}
+	for _, f := range editFields() {
+		pos := [2]int{f.Col, f.Row}
+		if other, ok := at[pos]; ok {
+			t.Errorf("%q and %q share column %d row %d", other, f.Label, f.Col, f.Row)
+		}
+		at[pos] = f.Label
+	}
+	if got := membershipSummary(&user.User{}); got != "(none)" {
+		t.Errorf("summary = %q", got)
+	}
+}
+
 // Roles and groups share one row, which left row 14 for the named flags.
 func TestMembershipFreesARow(t *testing.T) {
 	for _, f := range editFields() {

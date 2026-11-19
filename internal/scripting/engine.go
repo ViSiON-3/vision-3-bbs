@@ -14,12 +14,14 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sync"
 	"time"
 	"unicode/utf8"
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/jsutil"
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/dop251/goja"
 )
@@ -57,6 +59,7 @@ type Engine struct {
 	// the LF or NUL at the start of the next chunk is part of that Enter,
 	// not a key of its own.
 	crTrailer bool
+
 	// answer and answered record v3.prompt.answer (see prompt.go).
 	answer   any
 	answered bool
@@ -68,7 +71,25 @@ type Engine struct {
 	// an unfinished escape sequence's ESC on its own and keep the rest,
 	// so readNamedKey can wait for the remaining bytes.
 	holdEscape bool
+	// inLine is set while readLine reads, which ScriptConfig.Notice does
+	// not stop.
+	inLine bool
+	// noticeDue is set when ScriptConfig.Notice fired but input already
+	// read in went to the script first; the next key wait stops it.
+	noticeDue bool
+	// afterKey is set while the last key wait ended on input rather than
+	// on its timeout; a notice holds off a timed wait then (readKeyEcho).
+	afterKey bool
+	// noticeHeld is when a notice was first held off for a wait after a
+	// key; it is held no longer than noticeKeyHold from then.
+	noticeHeld time.Time
 }
+
+// noticeKeyHold is the longest a notice is held off for timed key waits that
+// follow keys. It is longer than the half second the board's menu scripts
+// wait for the second key of a command, and short enough that a toast is
+// not noticeably late.
+const noticeKeyHold = time.Second
 
 // readResult carries data or an error from the reader goroutine.
 type readResult struct {
@@ -110,13 +131,22 @@ func NewEngine(ctx context.Context, session *SessionContext, cfg ScriptConfig, p
 	}
 
 	// Halt JS execution on context cancellation.
-	go eng.watchContext()
+	// Without its watcher nothing would stop a busy script at its run time
+	// limit or a hang-up, so a watcher that panicked stops the script now.
+	safego.Go(safego.KindScriptWatch, session.NodeNumber, eng.watchContext, func() {
+		eng.cancel()
+		eng.vm.Interrupt(ErrTerminated)
+	})
 
 	// Register V3 API namespaces.
 	v3 := eng.vm.NewObject()
 	registerConsole(v3, eng)
 	registerSession(v3, eng)
 	registerPrompt(v3, eng)
+	if providers.Menu != nil {
+		registerMenu(v3, eng)
+	}
+	registerGfx(v3, eng)
 	if providers.UserMgr != nil && providers.CurrentUser != nil {
 		registerUser(v3, eng)
 		registerUsers(v3, eng)
@@ -126,6 +156,9 @@ func NewEngine(ctx context.Context, session *SessionContext, cfg ScriptConfig, p
 	}
 	if providers.FileMgr != nil {
 		registerFile(v3, eng)
+	}
+	if providers.Oneliners != nil {
+		registerOneliners(v3, eng)
 	}
 	registerData(v3, eng)
 	registerAnsi(v3, eng)
@@ -155,7 +188,11 @@ func (eng *Engine) Run(scriptPath string) error {
 
 	slog.Info("running V3 script", "path", scriptPath, "node", eng.session.NodeNumber)
 
-	_, err = eng.vm.RunScript(scriptPath, string(data))
+	err = eng.runScript(scriptPath, string(data))
+	if errors.Is(err, ErrHostPanic) {
+		eng.restoreTerminal()
+		return fmt.Errorf("script error: %w", err)
+	}
 	if err != nil {
 		if code, ok := exitStatus(err); ok {
 			if code != 0 {
@@ -164,15 +201,43 @@ func (eng *Engine) Run(scriptPath string) error {
 			}
 			return nil
 		}
+		// A script stopped for a notice as its run time ran out, or the
+		// caller hung up, ends for that instead.
 		if eng.ctx.Err() != nil {
 			if eng.ctx.Err() == context.DeadlineExceeded {
 				return ErrTimeout
 			}
 			return ErrDisconnect
 		}
+		if stoppedForNotice(err) {
+			return ErrNotice
+		}
 		return fmt.Errorf("script error: %w", err)
 	}
 	return nil
+}
+
+// runScript runs src, turning a Go panic in a host function the script
+// called into an ErrHostPanic error. goja passes such a panic straight
+// through RunScript, and on a caller's session goroutine it would end the
+// session, or with no recovery above it the board. The panic is logged with
+// its stack.
+func (eng *Engine) runScript(path, src string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("V3 script host function panicked",
+				"path", path, "node", eng.session.NodeNumber, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
+			err = fmt.Errorf("%w: %v", ErrHostPanic, r)
+		}
+	}()
+	_, err = eng.vm.RunScript(path, src)
+	return err
+}
+
+// restoreTerminal resets colours and shows the cursor, which a script whose
+// host function panicked may have left changed for whatever comes next.
+func (eng *Engine) restoreTerminal() {
+	eng.writeRaw("\x1b[0m\x1b[?25h")
 }
 
 // Close stops the engine's I/O goroutines and returns the input the script
@@ -286,6 +351,7 @@ func (eng *Engine) EnterTrailerPending() bool { return eng.crTrailer }
 
 // watchContext monitors the context and interrupts the JS runtime on cancellation.
 func (eng *Engine) watchContext() {
+	safego.TestPoint(safego.KindScriptWatch)
 	<-eng.ctx.Done()
 	eng.vm.Interrupt(ErrTerminated)
 }
@@ -361,8 +427,9 @@ func (eng *Engine) startReader() {
 				return false
 			}
 		}
-		go func() {
+		safego.Go(safego.KindScriptInput, eng.session.NodeNumber, func() {
 			defer close(eng.copierDone)
+			safego.TestPoint(safego.KindScriptInput)
 			for {
 				buf := make([]byte, 256)
 				n, err := eng.session.Session.Read(buf)
@@ -380,7 +447,7 @@ func (eng *Engine) startReader() {
 					return
 				}
 			}
-		}()
+		}, eng.cancel)
 	})
 }
 
@@ -391,8 +458,9 @@ func (eng *Engine) startDemandReader() {
 		eng.rawInputCh = make(chan readResult, 1)
 		eng.readRequests = make(chan struct{}, 1)
 		eng.copierDone = make(chan struct{})
-		go func() {
+		safego.Go(safego.KindScriptInput, eng.session.NodeNumber, func() {
 			defer close(eng.copierDone)
+			safego.TestPoint(safego.KindScriptInput)
 			for {
 				select {
 				case <-eng.ctx.Done():
@@ -412,7 +480,7 @@ func (eng *Engine) startDemandReader() {
 					return
 				}
 			}
-		}()
+		}, eng.cancel)
 	})
 }
 
@@ -441,6 +509,12 @@ func (eng *Engine) readKeyEcho(timeout time.Duration) (string, []byte, error) {
 	if timeout > 0 {
 		timer = time.After(timeout)
 	}
+	var holdTimer *time.Timer
+	defer func() {
+		if holdTimer != nil {
+			holdTimer.Stop()
+		}
+	}()
 
 	for {
 		var data []byte
@@ -452,33 +526,98 @@ func (eng *Engine) readKeyEcho(timeout time.Duration) (string, []byte, error) {
 				eng.readRequests <- struct{}{}
 				eng.readPending = true
 			}
-			select {
-			case result := <-eng.rawInputCh:
-				eng.readPending = false
-				if result.err != nil {
-					eng.cancel()
-					return "", nil, ErrDisconnect
+			// stopForNotice stops the script for a notice that has fired,
+			// unless input already read in is waiting: that goes to the
+			// script first. The interrupt stops the script at its next
+			// instruction, which try/catch cannot catch; a key read after
+			// this is returned by Close.
+			var result readResult
+			stopForNotice := func() bool {
+				select {
+				case result = <-eng.rawInputCh:
+					// The notice stays due for the next wait.
+					eng.noticeDue = true
+					return false
+				default:
+					eng.vm.Interrupt(noticeStop{})
+					return true
 				}
-				if len(result.data) == 0 {
-					return "", nil, nil
-				}
-				data = result.data
-				// The LF or NUL of an Enter split across two reads.
-				if eng.crTrailer {
-					eng.crTrailer = false
-					if data[0] == '\n' || data[0] == 0x00 {
-						if data = data[1:]; len(data) == 0 {
+			}
+			// A timed wait that follows a key may be a script waiting for
+			// the rest of a command (the W of /W). A notice does not stop
+			// it there, which would lose the key the script holds, but
+			// waits for the wait to end, for no longer than noticeKeyHold.
+			notice := eng.notice()
+			var hold <-chan time.Time
+			holdNotice := timeout > 0 && eng.afterKey
+		wait:
+			for {
+				select {
+				case result = <-eng.rawInputCh:
+					break wait
+				case <-timer:
+					eng.afterKey = false
+					// A notice that fired as the time ran out still stops it.
+					select {
+					case <-eng.notice():
+						if stopForNotice() {
+							return "", nil, ErrNotice
+						}
+						break wait
+					default:
+						return "", nil, nil
+					}
+				case <-notice:
+					if holdNotice {
+						// A notice sent once, not closed, stays due for
+						// the waits that follow.
+						eng.noticeDue = true
+						if eng.noticeHeld.IsZero() {
+							eng.noticeHeld = time.Now()
+						}
+						if left := noticeKeyHold - time.Since(eng.noticeHeld); left > 0 {
+							if holdTimer != nil {
+								holdTimer.Stop() // one from an earlier read of this key
+							}
+							holdTimer = time.NewTimer(left)
+							notice, hold = nil, holdTimer.C
 							continue
 						}
 					}
+					if stopForNotice() {
+						return "", nil, ErrNotice
+					}
+					break wait
+				case <-hold:
+					if stopForNotice() {
+						return "", nil, ErrNotice
+					}
+					break wait
+				case <-eng.ctx.Done():
+					return "", nil, ErrTerminated
 				}
-			case <-timer:
+			}
+			eng.readPending = false
+			if result.err != nil {
+				eng.cancel()
+				return "", nil, ErrDisconnect
+			}
+			if len(result.data) == 0 {
 				return "", nil, nil
-			case <-eng.ctx.Done():
-				return "", nil, ErrTerminated
+			}
+			data = result.data
+			// The LF or NUL of an Enter split across two reads.
+			if eng.crTrailer {
+				eng.crTrailer = false
+				if data[0] == '\n' || data[0] == 0x00 {
+					if data = data[1:]; len(data) == 0 {
+						continue
+					}
+				}
 			}
 		}
 
+		eng.afterKey = true
 		key := eng.parseInput(data)
 		if len(key) != 1 || key[0] < 0x80 {
 			// Any other key abandons a partial UTF-8 character, so its
@@ -498,6 +637,8 @@ func (eng *Engine) readKeyEcho(timeout time.Duration) (string, []byte, error) {
 // readLine reads a line of input with echo and basic editing. maxLen counts
 // characters, not bytes, and backspace removes one whole character.
 func (eng *Engine) readLine(maxLen int, opts lineOpts) (string, error) {
+	eng.inLine = true
+	defer func() { eng.inLine = false }()
 	var buf []byte
 	for {
 		key, echo, err := eng.readKeyEcho(0)
@@ -624,6 +765,37 @@ func skipCSI(data []byte) int {
 		}
 	}
 	return len(data)
+}
+
+// notice is the channel a key wait selects on for ScriptConfig.Notice, or
+// nil while a line is read.
+func (eng *Engine) notice() <-chan struct{} {
+	if eng.inLine {
+		return nil
+	}
+	if eng.noticeDue {
+		return noticeFired
+	}
+	return eng.cfg.Notice
+}
+
+// noticeFired is a channel that is always ready, for a notice that fired
+// earlier (Engine.noticeDue).
+var noticeFired = func() <-chan struct{} {
+	ch := make(chan struct{})
+	close(ch)
+	return ch
+}()
+
+// stoppedForNotice reports whether err is the interrupt readKeyEcho raises
+// when ScriptConfig.Notice fires.
+func stoppedForNotice(err error) bool {
+	var ie *goja.InterruptedError
+	if !errors.As(err, &ie) {
+		return false
+	}
+	_, ok := ie.Value().(noticeStop)
+	return ok
 }
 
 // exitStatus reports whether err is the interrupt raised by a clean exit()

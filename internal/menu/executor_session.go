@@ -9,6 +9,7 @@ import (
 
 	"github.com/ViSiON-3/vision-3-bbs/internal/ansi"
 	"github.com/ViSiON-3/vision-3-bbs/internal/editor"
+	"github.com/ViSiON-3/vision-3-bbs/internal/scripting"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/terminalio"
 	"github.com/ViSiON-3/vision-3-bbs/internal/user"
@@ -77,7 +78,8 @@ func clearSessionIdleTimeout(s ssh.Session) {
 // ClearSessionIdleTimeout is clearSessionIdleTimeout for the session handler,
 // which can set a timeout (SSH pre-auth, login sequence) before any menu runs
 // and so before MenuExecutor.Run's own deferred cleanup is in place. It drops
-// the session's time-limit deadline and any type-ahead kept for it too.
+// the session's time-limit deadline, any type-ahead kept for it, and the
+// connect probe's answer and reply trap too.
 func ClearSessionIdleTimeout(s ssh.Session) {
 	clearSessionIdleTimeout(s)
 	sessionDeadlines.Delete(s)
@@ -86,6 +88,9 @@ func ClearSessionIdleTimeout(s ssh.Session) {
 	sessionEnterTrailers.Delete(s)
 	clearLoginFailures(s)
 	clearCurrentMail(s)
+	sessionReplyTraps.Delete(s)
+	sessionSixelCaps.Delete(s)
+	sessionAudioCaps.Delete(s)
 }
 
 // sessionDeadlines remembers when each session's time limit runs out, for the
@@ -237,7 +242,19 @@ func getSessionIH(s ssh.Session) *editor.InputHandler {
 	if v, ok := sessionInputHandlers.Load(s); ok {
 		return v.(*editor.InputHandler)
 	}
-	ih := editor.NewInputHandler(s)
+	// Terminal replies to the connect probe are taken out of the input
+	// before any read (see ProbeTerminal). Keys kept from a script or door
+	// were read outside the trap, so it strips them first; a reply they end
+	// partway through is finished by the new handler.
+	trap := replyTrapFor(s)
+	var typeAhead []byte
+	if v, ok := sessionTypeAhead.LoadAndDelete(s); ok {
+		typeAhead = v.([]byte)
+		if trap != nil {
+			typeAhead = trap.StripReplies(typeAhead)
+		}
+	}
+	ih := editor.NewTrappedInputHandler(s, trap)
 	if d, ok := sessionIdleTimeouts.Load(s); ok {
 		ih.SetSessionIdleTimeout(d.(time.Duration))
 	}
@@ -249,8 +266,8 @@ func getSessionIH(s ssh.Session) *editor.InputHandler {
 	}
 	applyToastHook(s, ih)
 	// No one has read from the new handler yet, so this is its owner.
-	if v, ok := sessionTypeAhead.LoadAndDelete(s); ok {
-		ih.ReturnInput(v.([]byte))
+	if len(typeAhead) > 0 {
+		ih.ReturnInput(typeAhead)
 	}
 	if takeEnterTrailer(s) {
 		ih.ExpectEnterTrailer()
@@ -334,6 +351,19 @@ func resetSessionIH(s ssh.Session) {
 	takeEnterTrailer(s)
 }
 
+// dropSessionIH is resetSessionIH for a handler whose unread input is to be
+// discarded. It drains the handler's queue while the handler stops, so a
+// full queue cannot keep it from stopping.
+func dropSessionIH(s ssh.Session) {
+	if v, ok := sessionInputHandlers.Load(s); ok {
+		if ih, ok := v.(*editor.InputHandler); ok {
+			_, _ = ih.CloseAndTakeUnread()
+		}
+		sessionInputHandlers.Delete(s)
+	}
+	takeEnterTrailer(s)
+}
+
 // handOffSessionIH is resetSessionIH before a door. Keys the handler read
 // that no prompt consumed are kept (stashTypeAhead) rather than dropped, so
 // getSessionIH gives them to the handler it creates after the door, ahead of
@@ -392,6 +422,27 @@ func (e *MenuExecutor) holdScreen(s ssh.Session, terminal *term.Terminal, output
 		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
 	}
 	_ = e.writeCenteredPausePrompt(s, terminal, pausePrompt, outputMode, termWidth, termHeight)
+}
+
+// pauseHere shows the configured PauseString where the cursor is, as written
+// (a leading line break kept, no centring), and reads a line, which ends the
+// row when the caller presses Enter. A !door or %file value runs as a pause
+// prompt, as in writeCenteredPausePrompt, and a script that answers the
+// prompt ends the wait. It returns io.EOF when the caller disconnects.
+func (e *MenuExecutor) pauseHere(s ssh.Session, terminal *term.Terminal, outputMode ansi.OutputMode) error {
+	pausePrompt := e.Strings().PauseString
+	if pausePrompt == "" {
+		pausePrompt = "\r\n|07Press |15[ENTER]|07 to continue... "
+	}
+	answer, err := e.renderPrompt(terminal, outputMode, pausePrompt, nil, scripting.PromptPause)
+	if err != nil {
+		return err
+	}
+	if answer.set {
+		return nil
+	}
+	_, err = readLineFromSessionIH(s, terminal)
+	return err
 }
 
 // readLineFromSessionIH reads a simple command line from the shared session

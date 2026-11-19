@@ -116,7 +116,8 @@ type ServerConfig struct {
 	MaxConnectionsPerIP int    `json:"maxConnectionsPerIP"`
 	IPBlocklistPath     string `json:"ipBlocklistPath"`
 	IPAllowlistPath     string `json:"ipAllowlistPath"`
-	BadUsersPath        string `json:"badUsersPath"` // Blank uses badusers.txt in the selected config directory
+	BadUsersPath        string `json:"badUsersPath"`        // Blank uses badusers.txt in the selected config directory
+	GeoIPPath           string `json:"geoipPath,omitempty"` // MaxMind-format city database for the call log's From column; blank turns lookups off
 	MaxFailedLogins     int    `json:"maxFailedLogins"`
 	LockoutMinutes      int    `json:"lockoutMinutes"`
 	// MaxLoginTries is how many wrong passwords a call gets at the login
@@ -148,7 +149,7 @@ type ServerConfig struct {
 
 	// Challenge Gate — optional pre-login bot challenge (botgate-style).
 	EnableChallengeGate          bool   `json:"enableChallengeGate"`          // master on/off
-	ChallengeGateFile            string `json:"challengeGateFile"`            // art file in menus ansi dir
+	ChallengeGateFile            string `json:"challengeGateFile"`            // art file in prelogin/ansi, else the shipped menus/v3/ansi
 	ChallengeGateKey             string `json:"challengeGateKey"`             // "ESC" or a single character
 	ChallengeGateTimeoutSeconds  int    `json:"challengeGateTimeoutSeconds"`  // seconds to complete the challenge
 	ChallengeGateRequiredPresses int    `json:"challengeGateRequiredPresses"` // presses of the key to pass

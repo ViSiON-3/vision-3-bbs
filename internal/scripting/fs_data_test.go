@@ -229,6 +229,8 @@ func TestDataFilePath(t *testing.T) {
 		{ScriptConfig{Script: "voting.js", WorkingDir: filepath.Join(root, "scripts")}, filepath.Join(root, "scripts", "data", "voting.json")},
 		{ScriptConfig{Script: "sub/poll.js", WorkingDir: filepath.Join(root, "scripts", "examples")}, filepath.Join(root, "scripts", "data", "poll.json")},
 		{ScriptConfig{Script: "noext", WorkingDir: filepath.Join(root, "scripts")}, filepath.Join(root, "scripts", "data", "noext.json")},
+		// DataDir, set for a theme's menu script, wins over the working dir.
+		{ScriptConfig{Script: "main.js", WorkingDir: filepath.Join(root, "menus", "v3", "scripts"), DataDir: filepath.Join(root, "menus", "v3", "data")}, filepath.Join(root, "menus", "v3", "data", "main.json")},
 	}
 	for _, tt := range tests {
 		if got := dataFilePath(tt.cfg); got != tt.want {
@@ -237,6 +239,9 @@ func TestDataFilePath(t *testing.T) {
 	}
 	if sandboxRoot(tests[1].cfg) != filepath.Join(root, "scripts", "data") {
 		t.Errorf("sandboxRoot for subdir = %q", sandboxRoot(tests[1].cfg))
+	}
+	if got := sandboxRoot(tests[3].cfg); got != filepath.Join(root, "menus", "v3", "data") {
+		t.Errorf("sandboxRoot with DataDir = %q", got)
 	}
 }
 

@@ -12,12 +12,14 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 
 	"github.com/gliderlabs/ssh"
 	gossh "golang.org/x/crypto/ssh"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/snoop"
 	"github.com/ViSiON-3/vision-3-bbs/internal/util"
 )
@@ -68,24 +70,32 @@ func NewServer(cfg Config) (*Server, error) {
 
 	srv := &ssh.Server{
 		Addr:            addr,
-		Handler:         cfg.SessionHandler,
+		Handler:         recovering("session", cfg.SessionHandler),
 		HostSigners:     []ssh.Signer{signer},
-		PasswordHandler: cfg.PasswordHandler,
+		PasswordHandler: recoveringPassword(cfg.PasswordHandler),
 		Version:         cfg.Version,
 		ConnectionFailedCallback: func(conn net.Conn, err error) {
 			slog.Warn("SSH connection failed", "remote", conn.RemoteAddr(), "error", err)
 		},
 	}
 	if cfg.KeyboardInteractiveHandler != nil {
-		srv.KeyboardInteractiveHandler = cfg.KeyboardInteractiveHandler
+		h := cfg.KeyboardInteractiveHandler
+		srv.KeyboardInteractiveHandler = func(ctx ssh.Context, challenger gossh.KeyboardInteractiveChallenge) (ok bool) {
+			defer denyOnPanic("keyboard-interactive auth", ctx, &ok)
+			return h(ctx, challenger)
+		}
 	}
 	if cfg.PublicKeyHandler != nil {
-		srv.PublicKeyHandler = cfg.PublicKeyHandler
+		h := cfg.PublicKeyHandler
+		srv.PublicKeyHandler = func(ctx ssh.Context, key ssh.PublicKey) (ok bool) {
+			defer denyOnPanic("public key auth", ctx, &ok)
+			return h(ctx, key)
+		}
 	}
 	if len(cfg.SubsystemHandlers) > 0 {
 		srv.SubsystemHandlers = make(map[string]ssh.SubsystemHandler, len(cfg.SubsystemHandlers))
 		for name, h := range cfg.SubsystemHandlers {
-			srv.SubsystemHandlers[name] = ssh.SubsystemHandler(h)
+			srv.SubsystemHandlers[name] = ssh.SubsystemHandler(recovering("subsystem "+name, h))
 		}
 	}
 
@@ -94,7 +104,7 @@ func NewServer(cfg Config) (*Server, error) {
 	// (diffie-hellman-group1-sha1, 3des-cbc, hmac-sha1, ssh-rsa)
 	// required by retro BBS clients.
 	legacy := cfg.LegacySSHAlgorithms
-	verified := cfg.VerifiedPublicKeyCallback
+	verified := recoveringVerified(cfg.VerifiedPublicKeyCallback)
 	srv.ServerConfigCallback = func(ctx ssh.Context) *gossh.ServerConfig {
 		// gliderlabs adds its auth callbacks to this config but leaves
 		// VerifiedPublicKeyCallback alone.
@@ -379,10 +389,11 @@ func (s *BBSSession) Read(p []byte) (int, error) {
 			buf := make([]byte, len(p))
 			ch := make(chan readResult, 1)
 			s.readCh = ch
-			go func() {
+			safego.Go(safego.KindTerminal, s, func() {
+				safego.TestPoint(safego.KindTerminal)
 				n, err := s.Session.Read(buf)
 				ch <- readResult{data: buf[:n], err: err}
-			}()
+			}, func() { ch <- readResult{err: safego.ErrPanicked} })
 		}
 
 		select {
@@ -398,5 +409,74 @@ func (s *BBSSession) Read(p []byte) (int, error) {
 			// Deliver through the pending branch so the interrupt is re-checked.
 			s.pending = &readResult{data: b}
 		}
+	}
+}
+
+// recovering wraps h so a panic while it serves a session ends that session
+// only. gliderlabs/ssh runs each session on its own goroutine and recovers
+// nothing, so without this one caller's panic ends the process and drops
+// every caller. The panic is logged with its stack; the BBS's own session
+// handler recovers first, with the node, and this catches what it does not
+// cover (connection checks before a node is given, the WFC subsystems).
+func recovering(what string, h func(ssh.Session)) func(ssh.Session) {
+	if h == nil {
+		return nil
+	}
+	return func(s ssh.Session) {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("SSH "+what+" panicked; it is ended, the server goes on",
+					"remote", s.RemoteAddr(), "user", s.User(), "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
+				// A failure for the client; the server's own Exit(0) after
+				// the handler then finds the session already exited.
+				_ = s.Exit(1)
+			}
+		}()
+		h(s)
+	}
+}
+
+// The auth callbacks run on the connection's goroutine during the handshake,
+// before any session, and the SSH libraries recover nothing there: a panic
+// in one would end the process for every caller, at the hands of a client
+// that has not even logged in. Each is wrapped to log the panic with its
+// stack and refuse the attempt.
+
+// denyOnPanic, deferred in an auth callback with ok its result, turns a
+// panic into a refusal.
+func denyOnPanic(what string, ctx ssh.Context, ok *bool) {
+	if r := recover(); r != nil {
+		slog.Error("SSH "+what+" panicked; the attempt is refused, the server goes on",
+			"remote", ctx.RemoteAddr(), "user", ctx.User(), "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
+		*ok = false
+	}
+}
+
+// recoveringPassword wraps h as denyOnPanic describes; nil stays nil.
+func recoveringPassword(h func(ssh.Context, string) bool) ssh.PasswordHandler {
+	if h == nil {
+		return nil
+	}
+	return func(ctx ssh.Context, password string) (ok bool) {
+		defer denyOnPanic("password auth", ctx, &ok)
+		return h(ctx, password)
+	}
+}
+
+// recoveringVerified wraps a VerifiedPublicKeyCallback so a panic refuses
+// the key with an error; nil stays nil.
+func recoveringVerified(cb func(gossh.ConnMetadata, gossh.PublicKey, *gossh.Permissions, string) (*gossh.Permissions, error)) func(gossh.ConnMetadata, gossh.PublicKey, *gossh.Permissions, string) (*gossh.Permissions, error) {
+	if cb == nil {
+		return nil
+	}
+	return func(conn gossh.ConnMetadata, key gossh.PublicKey, perms *gossh.Permissions, algo string) (out *gossh.Permissions, err error) {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("SSH verified key check panicked; the key is refused, the server goes on",
+					"remote", conn.RemoteAddr(), "user", conn.User(), "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
+				out, err = nil, fmt.Errorf("verified key check failed: %v", r)
+			}
+		}()
+		return cb(conn, key, perms, algo)
 	}
 }

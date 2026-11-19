@@ -55,7 +55,7 @@ type acsTester struct {
 // acsTestFieldDef is the edit-screen action for the tester.
 func acsTestFieldDef() fieldDef {
 	return fieldDef{
-		Label: acsTestField, Type: ftAction, Col: rightCol, Row: 16, Width: 16,
+		Label: acsTestField, Type: ftAction, Col: rightCol, Row: 17, Width: 16,
 		Get: func(*userType) string { return "(Enter)" },
 	}
 }

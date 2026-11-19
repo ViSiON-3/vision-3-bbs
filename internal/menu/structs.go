@@ -18,6 +18,12 @@ type MenuRecord struct {
 	// ForceHotKey makes the menu take single-key input for every caller,
 	// whatever their Hot Keys setting.
 	ForceHotKey bool `json:"FORCEHOTKEY"`
+	// Script names a v3_script door that draws this menu and answers its
+	// prompt, in place of the menu's screen and prompt (see menu_script.go):
+	// the door's code, then any words to pass it as arguments ("SUBMENU
+	// blue"). Empty takes the menu set's menuScript from theme.json; "NONE"
+	// turns that default off for this menu.
+	Script string `json:"SCRIPT,omitempty"`
 }
 
 // GetClrScrBefore reports whether the screen is cleared before the menu is

@@ -15,7 +15,8 @@ func registerNodes(v3 *goja.Object, eng *Engine) {
 	registry := eng.providers.SessionRegistry
 
 	// list() — returns array of active nodes [{node, handle, activity, idle, invisible}].
-	// Invisible sessions are excluded unless the current user is sysop (accessLevel >= 200).
+	// Invisible sessions are excluded unless the current user is sysop (accessLevel >= 200),
+	// and test logins unless the current user is at the board's sysop level.
 	jsutil.Set(obj, "list", func(call goja.FunctionCall) goja.Value {
 		sessions := registry.ListActive()
 		arr := vm.NewArray()
@@ -23,7 +24,7 @@ func registerNodes(v3 *goja.Object, eng *Engine) {
 		i := 0
 		for _, s := range sessions {
 			s.Mutex.RLock()
-			invisible := s.Invisible
+			invisible, testLogin := s.Invisible, s.TestLogin
 			handle := ""
 			if s.User != nil {
 				handle = s.User.Handle
@@ -33,7 +34,7 @@ func registerNodes(v3 *goja.Object, eng *Engine) {
 			idle := time.Since(s.LastActivity).Seconds()
 			s.Mutex.RUnlock()
 
-			if invisible && !isSysop {
+			if hiddenNode(invisible, testLogin, isSysop, eng.session.SysOp) {
 				continue
 			}
 
@@ -49,18 +50,19 @@ func registerNodes(v3 *goja.Object, eng *Engine) {
 		return arr
 	})
 
-	// count() — returns the number of active nodes (respects invisible flag).
+	// count() — returns the number of active nodes, leaving out those list() leaves out.
 	jsutil.Set(obj, "count", func(call goja.FunctionCall) goja.Value {
 		sessions := registry.ListActive()
 		isSysop := eng.session.AccessLevel >= 200
 		count := 0
 		for _, s := range sessions {
 			s.Mutex.RLock()
-			invisible := s.Invisible
+			invisible, testLogin := s.Invisible, s.TestLogin
 			s.Mutex.RUnlock()
-			if !invisible || isSysop {
-				count++
+			if hiddenNode(invisible, testLogin, isSysop, eng.session.SysOp) {
+				continue
 			}
+			count++
 		}
 		return vm.ToValue(count)
 	})
@@ -109,4 +111,15 @@ func registerNodes(v3 *goja.Object, eng *Engine) {
 	})
 
 	jsutil.Set(v3, "nodes", obj)
+}
+
+// hiddenNode reports whether a node is left out of v3.nodes for a viewer:
+// a test login unless the viewer is at the board's sysop level (sysOp),
+// any other invisible session unless the viewer is at level 200 or more
+// (level200).
+func hiddenNode(invisible, testLogin, level200, sysOp bool) bool {
+	if testLogin {
+		return !sysOp
+	}
+	return invisible && !level200
 }

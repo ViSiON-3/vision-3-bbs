@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/gliderlabs/ssh"
 	"golang.org/x/term"
 
+	"github.com/ViSiON-3/vision-3-bbs/internal/safego"
 	"github.com/ViSiON-3/vision-3-bbs/internal/winch"
 )
 
@@ -215,6 +217,9 @@ func (d *zrposDetector) scan(p []byte, found func(hex bool, end int, straddles b
 // upload dialog without sending a ZModem abort), the process would otherwise
 // retry indefinitely. Pass 0 to disable.
 func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinIdleTimeout time.Duration) error {
+	// finished closes when the transfer returns; see releaseAfterPanic.
+	finished := make(chan struct{})
+	defer close(finished)
 	// Signal that a binary transfer is active so background code (terminal
 	// repaint on window resize) doesn't write to the session and corrupt
 	// the binary stream.
@@ -269,8 +274,16 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	//     process immediately rather than waiting for the idle timer.
 	//  3. Detect ZRPOS frames (receiver requesting retransmission due to data
 	//     corruption) and signal the output goroutine to reduce chunk size.
-	go func() {
+	// inputPanicked is set by the stdin goroutine or the idle monitor if it
+	// panics, before it reports itself done, so a clean exit of the program
+	// cannot hide the loss.
+	var inputPanicked atomic.Bool
+	// monitorDone closes when the idle monitor, if there is one, has ended.
+	monitorDone := make(chan struct{})
+	safego.Go(safego.KindTransfer, s, func() {
 		defer close(inputDone)
+		defer markPanicked(&inputPanicked)
+		safego.TestPoint(safego.KindTransfer)
 		buf := make([]byte, 32*1024)
 		var total int64
 		var cpErr error
@@ -338,14 +351,25 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		}
 		slog.Debug("direct stdin copy finished", "cmd", cmd.Path, "bytes", total, "error", cpErr)
 		_ = stdinPipe.Close()
-	}()
+	}, func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = stdoutPipe.Close() // a child left holding stdout must not keep the copy going
+		releaseAfterPanic(s, finished)
+	})
 
 	// Idle monitor: if no bytes arrive from the client within stdinIdleTimeout,
 	// the user has likely cancelled their terminal uploader without sending a
 	// ZModem abort (CAN sequence). Kill the process so the BBS doesn't loop
 	// indefinitely re-offering the transfer.
-	if stdinIdleTimeout > 0 {
-		go func() {
+	if stdinIdleTimeout <= 0 {
+		close(monitorDone)
+	} else {
+		safego.Go(safego.KindTransfer, s, func() {
+			defer close(monitorDone)
+			defer markPanicked(&inputPanicked)
+			safego.TestPoint(safego.KindTransfer)
 			timer := time.NewTimer(stdinIdleTimeout)
 			defer timer.Stop()
 			for {
@@ -372,7 +396,13 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 					return // main context cancelled; main select handles the kill
 				}
 			}
-		}()
+		}, func() {
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			_ = stdoutPipe.Close() // as the idle timeout does: unblock the output copy
+			releaseAfterPanic(s, finished)
+		})
 	}
 
 	// command stdout → session (raw bytes, no CRLF conversion)
@@ -382,7 +412,8 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	// adaptiveCopy starts with small chunks (4 KB) and ramps up to 8 KB for
 	// throughput. If the stdin goroutine detects a ZRPOS (retransmission
 	// request), it signals backoff and the chunk size is halved.
-	go func() {
+	safego.Go(safego.KindTransfer, s, func() {
+		safego.TestPoint(safego.KindTransfer)
 		dst := io.Writer(s)
 		if rw, ok := s.(rawBinaryWriter); ok {
 			slog.Debug("using RawWrite for binary-safe output", "cmd", cmd.Path, "type", fmt.Sprintf("%T", s))
@@ -393,7 +424,12 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		n, cpErr := adaptiveCopy(dst, stdoutPipe, &zrposBackoff)
 		slog.Debug("direct stdout copy finished", "cmd", cmd.Path, "bytes", n, "error", cpErr)
 		outputDone <- cpErr
-	}()
+	}, func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		outputDone <- safego.ErrPanicked
+	})
 
 	// Race: ctx cancellation vs normal completion (outputDone then cmd.Wait).
 	//
@@ -410,10 +446,30 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		copyErr error
 	}
 	cmdDone := make(chan cmdResult, 1)
-	go func() {
+	// The program is waited for once, by whichever comes first: the goroutine
+	// below, or its panic handling, which must not return before the
+	// program's own I/O (stderrBuf) has finished.
+	var waitOnce sync.Once
+	var waitErr error
+	// waited is set once Wait has returned, after which the program's
+	// stderrBuf is no longer written and may be read.
+	var waited atomic.Bool
+	waitCmd := func() error {
+		waitOnce.Do(func() {
+			waitErr = cmd.Wait()
+			waited.Store(true)
+		})
+		return waitErr
+	}
+	// gotOutput is set once the goroutine below has the copier's result; until
+	// then, its panic handling must join the copier itself.
+	var gotOutput bool
+	safego.Go(safego.KindTransfer, s, func() {
+		safego.TestPoint(safego.KindTransfer)
 		copyErr := <-outputDone
+		gotOutput = true
 		waitDone := make(chan error, 1)
-		go func() { waitDone <- cmd.Wait() }()
+		safego.Go(safego.KindTransfer, s, func() { waitDone <- waitCmd() }, func() { waitDone <- safego.ErrPanicked })
 		select {
 		case err := <-waitDone:
 			cmdDone <- cmdResult{waitErr: err, copyErr: copyErr}
@@ -424,7 +480,38 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 			}
 			cmdDone <- cmdResult{waitErr: <-waitDone, copyErr: copyErr}
 		}
-	}()
+	}, func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		// The copier may still hold a frame for the client: let it finish
+		// before the abort is sent, closing the session if it is stuck.
+		if !gotOutput {
+			_ = stdoutPipe.Close()
+			var copyErr error
+			select {
+			case copyErr = <-outputDone:
+			case <-time.After(postOutputGrace):
+				_ = s.Close()
+				copyErr = <-outputDone
+			}
+			slog.Debug("output copy joined after a panic", "cmd", cmd.Path, "error", copyErr)
+		}
+		// A child left holding stderr could keep Wait from returning: wait
+		// a bounded time, and leave stderrBuf unread if it does not (see
+		// waited).
+		reaped := make(chan struct{})
+		safego.Go(safego.KindTransfer, s, func() {
+			_ = waitCmd()
+			close(reaped)
+		}, nil)
+		select {
+		case <-reaped:
+		case <-time.After(panicReleaseGrace):
+			slog.Warn("transfer program not reaped after a panic; going on without it", "cmd", cmd.Path)
+		}
+		cmdDone <- cmdResult{waitErr: safego.ErrPanicked}
+	})
 
 	var cmdErr error
 	select {
@@ -448,6 +535,12 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 			cmdErr = fmt.Errorf("stdout copy failed: %w", res.copyErr)
 		}
 	}
+	// If the caller's input was cut off by a panic the transfer did not
+	// complete, however the program ended. The stdin goroutine may still be
+	// running here; it is checked again once it has been stopped, below.
+	if cmdErr == nil && inputPanicked.Load() {
+		cmdErr = safego.ErrPanicked
+	}
 	slog.Debug("command finished (direct)", "cmd", cmd.Path, "error", cmdErr)
 
 	// When the transfer ended abnormally (killed or non-zero exit), send a
@@ -457,13 +550,13 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 	// (SyncTerm) detects the ZRINIT and re-opens the upload/download dialog.
 	// Sending 8× CAN tells the client to abort its ZModem session and return
 	// to terminal mode.
+	zmodemAbort := append(bytes.Repeat([]byte{0x18}, 8), '\r', '\n')
 	if cmdErr != nil {
-		zmodemAbort := append(bytes.Repeat([]byte{0x18}, 8), '\r', '\n')
 		_, _ = s.Write(zmodemAbort)
 	}
 
 	// Log stderr output from the external transfer program.
-	if stderrBuf.Len() > 0 {
+	if waited.Load() && stderrBuf.Len() > 0 {
 		for _, line := range strings.Split(strings.TrimSpace(stderrBuf.String()), "\n") {
 			if line = strings.TrimSpace(line); line != "" {
 				slog.Info("external command stderr", "cmd", filepath.Base(cmd.Path), "line", line)
@@ -488,6 +581,18 @@ func RunCommandDirect(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinId
 		slog.Debug("stdin goroutine finished cleanly", "cmd", cmd.Path)
 	case <-time.After(2 * time.Second):
 		slog.Warn("stdin goroutine did not finish within 2s, proceeding", "cmd", cmd.Path)
+	}
+	// The idle monitor ends with the stdin goroutine; wait for it too.
+	select {
+	case <-monitorDone:
+	case <-time.After(2 * time.Second):
+		slog.Warn("idle monitor did not finish within 2s, proceeding", "cmd", cmd.Path)
+	}
+	// A stdin or idle-monitor panic that came after the check above still
+	// fails the transfer, and the client still gets the abort.
+	if cmdErr == nil && inputPanicked.Load() {
+		cmdErr = safego.ErrPanicked
+		_, _ = s.Write(zmodemAbort)
 	}
 
 	// CRITICAL: Clear the read interrupt and reset the connection deadline
@@ -557,6 +662,9 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	// finished closes when the transfer returns; see releaseAfterPanic.
+	finished := make(chan struct{})
+	defer close(finished)
 	// Window changes come through winch, so the session loop sees them too.
 	// Subscribe before reading the size, so a change that lands between the
 	// two is queued rather than lost.
@@ -580,8 +688,9 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 	// ptmx is closed so no Setsize can run on a closed (or reused) descriptor.
 	resizeStop := make(chan struct{})
 	resizeDone := make(chan struct{})
-	go func() {
+	safego.Go(safego.KindTransfer, s, func() {
 		defer close(resizeDone)
+		safego.TestPoint(safego.KindTransfer)
 		if ptyReq.Window.Width > 0 || ptyReq.Window.Height > 0 {
 			wErr := pty.Setsize(ptmx, &pty.Winsize{Rows: uint16(ptyReq.Window.Height), Cols: uint16(ptyReq.Window.Width)})
 			if wErr != nil {
@@ -602,7 +711,7 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 				}
 			}
 		}
-	}()
+	}, nil)
 
 	// Set PTY to raw mode so binary protocol data passes through unmodified.
 	fd := int(ptmx.Fd())
@@ -630,29 +739,45 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 	// --- I/O Copying ---
 	inputDone := make(chan struct{})
 	outputDone := make(chan struct{})
-	go func() {
+	// copyPanicked is set by a copy goroutine that panicked, before its done
+	// channel closes, so a clean exit of the program cannot hide the loss.
+	var copyPanicked atomic.Bool
+	safego.Go(safego.KindTransfer, s, func() {
 		defer close(inputDone)
+		defer markPanicked(&copyPanicked)
+		safego.TestPoint(safego.KindTransfer)
 		slog.Debug("copying session stdin to PTY starting", "cmd", cmd.Path)
 		n, err := io.Copy(ptmx, s)
 		slog.Debug("copying session stdin to PTY finished", "cmd", cmd.Path, "bytes", n, "error", err)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrClosed) && !errors.Is(err, syscall.EIO) && !errors.Is(err, syscall.EINTR) {
 			slog.Warn("error copying session stdin to PTY", "cmd", cmd.Path, "error", err)
 		}
-	}()
-	go func() {
+	}, func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		releaseAfterPanic(s, finished)
+	})
+	safego.Go(safego.KindTransfer, s, func() {
 		defer close(outputDone)
+		defer markPanicked(&copyPanicked)
+		safego.TestPoint(safego.KindTransfer)
 		slog.Debug("copying PTY stdout to session starting", "cmd", cmd.Path)
 		n, err := io.Copy(s, ptmx)
 		slog.Debug("copying PTY stdout to session finished", "cmd", cmd.Path, "bytes", n, "error", err)
 		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrClosed) && !errors.Is(err, syscall.EIO) {
 			slog.Warn("error copying PTY stdout to session", "cmd", cmd.Path, "error", err)
 		}
-	}()
+	}, func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+	})
 
 	// Race: ctx cancellation vs normal completion
 	slog.Debug("waiting for command completion", "cmd", cmd.Path)
 	cmdDoneCh := make(chan error, 1)
-	go func() { cmdDoneCh <- cmd.Wait() }()
+	safego.Go(safego.KindTransfer, s, func() { cmdDoneCh <- cmd.Wait() }, func() { cmdDoneCh <- safego.ErrPanicked })
 
 	var cmdErr error
 	select {
@@ -690,7 +815,37 @@ func RunCommandWithPTY(ctx context.Context, s ssh.Session, cmd *exec.Cmd, stdinI
 	}
 	<-outputDone
 
+	if cmdErr == nil && copyPanicked.Load() {
+		cmdErr = safego.ErrPanicked
+	}
 	return cmdErr
+}
+
+// panicReleaseGrace is how long a transfer whose input copy panicked has to
+// finish before its session is closed (releaseAfterPanic).
+const panicReleaseGrace = 5 * time.Second
+
+// releaseAfterPanic, run when a transfer's input copy has panicked and its
+// program has been killed, waits panicReleaseGrace for the transfer to
+// return, and closes the session if it has not: the output copy can be
+// stuck writing to the caller, which nothing else would end.
+func releaseAfterPanic(s ssh.Session, finished <-chan struct{}) {
+	select {
+	case <-finished:
+	case <-time.After(panicReleaseGrace):
+		slog.Warn("transfer still running after its input copy panicked; closing the session")
+		_ = s.Close()
+	}
+}
+
+// markPanicked, deferred in a goroutine after the calls that report it done,
+// sets flag if the goroutine is panicking and passes the panic on for
+// safego.Go to log; it runs first, so whoever waits sees flag set.
+func markPanicked(flag *atomic.Bool) {
+	if r := recover(); r != nil {
+		flag.Store(true)
+		panic(r)
+	}
 }
 
 // ExecuteZmodemSend initiates a Zmodem send (sz) of one or more files using a PTY.
