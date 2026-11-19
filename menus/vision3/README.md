@@ -72,9 +72,10 @@ copy leaves `menus.d/` alone.
 The connection check and the login matrix are the board's, not a theme's:
 the board reads them from its `prelogin/` directory, else stock's, so
 this theme holds none of them. A board that wants the ViSiON/3 matrix puts
-its files in `prelogin/`: the logo as `prelogin/ansi/PDMATRIX.PNG` (the same
-picture as `data/vision3-logo.png`), with `prelogin/ansi/PDMATRIX.ANS`,
-`prelogin/ansi/PDMATRIX.EFX` and `prelogin/bar/PDMATRIX.BAR`.
+its files in `prelogin/`: the logo as `prelogin/ansi/PDMATRIX.PNG` (`data/vision3-logo.png`
+scaled to 320x107 on its own palette, so it fits beside the cube), with
+`prelogin/ansi/PDMATRIX.ANS`, `prelogin/ansi/PDMATRIX.EFX`,
+`prelogin/bar/PDMATRIX.BAR` and `prelogin/cfg/PDMATRIX.CFG`.
 `templates/prelogin-example/` holds that set, with two tones; copy it in with
 `mkdir -p prelogin && cp -R templates/prelogin-example/. prelogin/`. Without
 it the board shows the stock matrix from `menus/v3`.

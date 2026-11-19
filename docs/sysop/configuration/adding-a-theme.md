@@ -120,8 +120,9 @@ prelogin/
 └── cfg/                PDMATRIX.CFG
 ```
 
-- An example set ships in `templates/prelogin-example/`: the ViSiON/3 logo
-  as the matrix picture with its effects file, lettering and lightbar, and
+- An example set ships in `templates/prelogin-example/`: the ViSiON/3 logo,
+  scaled to 320x107, beside the cube (the side layout), with its effects
+  file, lettering, lightbar and command list, and
   two tones (Kenney Interface Sounds, CC0; see `ansi/PDMATRIX.SOUNDS.txt`).
   Copy its contents into the board's `prelogin/`, as in
   `mkdir -p prelogin && cp -R templates/prelogin-example/. prelogin/` run in
