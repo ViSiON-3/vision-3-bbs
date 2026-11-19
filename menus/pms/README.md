@@ -56,27 +56,25 @@ See **Pre-login screens** in `docs/sysop/configuration/adding-a-theme.md`.
 
 ## What it expects of a board
 
-The stock `configs/doors.json` lacks several doors the theme's menus and
-strings name. Each missing one shows "Door '...' is not configured" and
-returns to the menu; a missing `PAUSEBAR` prints `!PAUSEBAR` as the pause
-prompt's text. `./vision3 doctor --theme pms` lists the missing menu doors;
-it does not check `PAUSEBAR`.
+The stock `configs/doors.json` defines the two doors the theme needs whose
+scripts ship: `PAUSEBAR`, the pause prompt, and `AMILC`, Callers on the
+main menu. Both are hidden, so a generated door menu does not list them.
+A board set up before they were added to the template needs them copied
+from `templates/configs/doors.json`; without them a pause prints
+`!PAUSEBAR` as its text and Callers shows "Door 'AMILC' is not
+configured".
+
+The Doors menu also names seven games that do not ship. Each shows "Door
+'...' is not configured" and returns to the menu until the sysop installs
+the game and adds its door. `./vision3 doctor --theme pms` lists the
+missing menu doors; it does not check `PAUSEBAR`.
 
 | Code | Named by | Its script | In stock `doors.json` |
 |------|----------|------------|-----------------------|
-| `PAUSEBAR` | `strings.json` `pauseString` | `menus/pms/scripts/pausebar.js` | no |
-| `AMILC` | Main, `W` Callers | `scripts/examples/amilc.js` | no |
+| `PAUSEBAR` | `strings.json` `pauseString` | `menus/pms/scripts/pausebar.js` | yes, hidden |
+| `AMILC` | Main, `W` Callers | `scripts/examples/amilc.js` | yes, hidden |
 | `ONELINERS`, `VOTING`, `STATS`, `USERSTATS`, `LAST10`, `AUTOMSG` | Doors; `ONELINERS` also Main | `scripts/examples/` | yes |
 | `DANK`, `USURPER`, `LORD`, `LORD2`, `SYNCDOOM`, `OOII`, `CARRIER` | Doors | none; the games the sysop installs | no |
-
-The two whose scripts ship can be added to `configs/doors.json` as:
-
-```json
-{ "code": "PAUSEBAR", "name": "Pause bar", "type": "v3_script",
-  "script": "pausebar.js", "working_directory": "menus/pms/scripts" },
-{ "code": "AMILC", "name": "Last callers", "type": "v3_script",
-  "script": "amilc.js", "working_directory": "scripts/examples" }
-```
 
 ## Files
 

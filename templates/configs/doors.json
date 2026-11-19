@@ -59,6 +59,24 @@
         "working_directory": "scripts/examples"
     },
     {
+        "code": "AMILC",
+        "name": "Last callers",
+        "description": "Callers on the PMS theme's main menu",
+        "type": "v3_script",
+        "script": "amilc.js",
+        "working_directory": "scripts/examples",
+        "hidden": true
+    },
+    {
+        "code": "PAUSEBAR",
+        "name": "Pause bar",
+        "description": "The PMS theme's pause prompt (its strings.json pauseString)",
+        "type": "v3_script",
+        "script": "pausebar.js",
+        "working_directory": "menus/pms/scripts",
+        "hidden": true
+    },
+    {
         "code": "ARTVIEW",
         "name": "Archive Viewer",
         "description": "Views ZIP archives from the file lists (config.json archiveViewerDoor)",

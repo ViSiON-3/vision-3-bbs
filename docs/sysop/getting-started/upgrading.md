@@ -401,6 +401,11 @@ upgraded board does not, until you add it.
   your `doors.json`, and set `archiveViewerDoor` and `textViewerDoor` in
   `config.json`. Left unset, the built-in viewers run as before. See
   [Viewer doors](files/file-areas.md#viewer-doors).
+- **PMS theme doors.** The PMS theme's pause prompt runs the `PAUSEBAR`
+  door and its Callers command the `AMILC` door. Without them a pause
+  prints `!PAUSEBAR` and Callers reports the door is not configured. If
+  you use the theme, add both from `templates/configs/doors.json` to your
+  `doors.json`. They are hidden, so the stock door menu does not list them.
 - **`configs/roles.json`.** Re-running `./setup.sh` copies the template,
   which defines a `validator` role assigned to nobody. With no file there
   are no roles and nothing changes. See [Admin Roles](users/admin-roles.md).
