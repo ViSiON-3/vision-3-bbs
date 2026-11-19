@@ -180,6 +180,9 @@ func (e *MenuExecutor) Run(s ssh.Session, terminal *term.Terminal, userManager *
 		// regions, pipe/token substitution, CP437/encoding conversion).
 		ansiProcessResult, renderErr := st.renderMenuAnsi()
 		if renderErr != nil {
+			if st.backFromMissingScreen(renderErr) {
+				continue
+			}
 			return "", st.currentUser, renderErr
 		}
 
