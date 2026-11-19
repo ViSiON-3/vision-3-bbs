@@ -86,8 +86,7 @@ func (um *UserMgr) updateUserByID(u *User, chatBar *bool) error {
 		delete(um.users, oldKey)
 	}
 
-	userCopy := *u
-	userCopy.TwitList = append([]TwitEntry(nil), u.TwitList...)
+	userCopy := *u.Clone()
 	// Same guard as UpdateUser: a copy taken before an external edit must not
 	// carry the pre-edit sysop fields back over what ./ue wrote.
 	if current != nil && current.gen > userCopy.gen {
@@ -147,8 +146,7 @@ func (um *UserMgr) UpdateUser(u *User) error {
 		return ErrUserNotFound
 	}
 	// Create a defensive copy to prevent external mutations from bypassing locks
-	userCopy := *u
-	userCopy.TwitList = append([]TwitEntry(nil), u.TwitList...)
+	userCopy := *u.Clone()
 	previous := um.users[lowerHandle]
 	// The caller is writing a copy it took earlier in the session. If the
 	// record has been refreshed from an external edit since then (./ue
@@ -188,9 +186,7 @@ func (um *UserMgr) GetUser(handle string) (*User, bool) {
 	if !exists {
 		return nil, false
 	}
-	userCopy := *user
-	userCopy.TwitList = append([]TwitEntry(nil), user.TwitList...)
-	return &userCopy, true
+	return user.Clone(), true
 }
 
 // GetUserByID returns a user by their ID (for optimistic locking checks)
@@ -201,9 +197,7 @@ func (um *UserMgr) GetUserByID(id int) (*User, bool) {
 	for _, user := range um.users {
 		if user.ID == id {
 			// Return a copy to prevent modification of the internal user data
-			userCopy := *user
-			userCopy.TwitList = append([]TwitEntry(nil), user.TwitList...)
-			return &userCopy, true
+			return user.Clone(), true
 		}
 	}
 	return nil, false
@@ -218,6 +212,16 @@ func (um *UserMgr) NextUserID() int {
 
 // AddUser creates a new user, hashes the password, assigns an ID, and saves.
 func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*User, error) {
+	return um.AddUserWith(password, handle, realName, groupLocation, nil)
+}
+
+// AddUserWith is AddUser with init, when not nil, filling in the rest of the
+// new record before its first save, so the account and its signup fields
+// (creation time, the welcome letter owed, the areas it joins) reach disk
+// together or not at all. init runs under the manager's lock: it only sets
+// fields on the record, and calls nothing on the manager. The ID, handle and
+// password it is given can't be changed.
+func (um *UserMgr) AddUserWith(password, handle, realName, groupLocation string, init func(*User)) (*User, error) {
 	handle = strings.TrimSpace(handle)
 	if handle == "" {
 		return nil, fmt.Errorf("handle cannot be blank")
@@ -287,6 +291,14 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 		Validated:     um.autoValidate,
 		LastLogin:     time.Time{},
 	}
+	if init != nil {
+		id, hash := newUser.ID, newUser.PasswordHash
+		init(newUser)
+		newUser.ID, newUser.Handle, newUser.PasswordHash = id, handle, hash
+		// Stored as a copy: init may keep the record, or a slice or map it
+		// put on it.
+		newUser = newUser.Clone()
+	}
 
 	// Add to map and increment nextUserID
 	um.users[lowerHandle] = newUser
@@ -301,7 +313,9 @@ func (um *UserMgr) AddUser(password, handle, realName, groupLocation string) (*U
 	}
 
 	slog.Info("added user", "handle", newUser.Handle, "id", newUser.ID)
-	return newUser, nil
+	// A copy, as every getter returns: the caller must not write to the
+	// stored record without the lock.
+	return newUser.Clone(), nil
 }
 
 // SetNewUserLevel sets the access level assigned to new user signups.

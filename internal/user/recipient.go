@@ -35,16 +35,12 @@ func (um *UserMgr) ResolveRecipient(name string) (*User, bool) {
 		if u.DeletedUser {
 			return nil, false
 		}
-		c := *u
-		c.TwitList = append([]TwitEntry(nil), u.TwitList...)
-		return &c, true
+		return u.Clone(), true
 	}
 	if strings.EqualFold(name, "sysop") {
 		for _, u := range um.users {
 			if u.ID == 1 && !u.DeletedUser {
-				c := *u
-				c.TwitList = append([]TwitEntry(nil), u.TwitList...)
-				return &c, true
+				return u.Clone(), true
 			}
 		}
 		return nil, false
@@ -62,9 +58,7 @@ func (um *UserMgr) ResolveRecipient(name string) (*User, bool) {
 	if match == nil {
 		return nil, false
 	}
-	c := *match
-	c.TwitList = append([]TwitEntry(nil), match.TwitList...)
-	return &c, true
+	return match.Clone(), true
 }
 
 // HandleExists reports whether handle belongs to an account, deleted or not.

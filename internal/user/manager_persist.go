@@ -72,7 +72,11 @@ func (um *UserMgr) saveUsersLocked() error { // Receiver uses renamed type
 	// Written temp-file-then-rename, so a crash mid-write cannot leave a
 	// truncated users.json: readers see the whole old file or the whole new
 	// one. See writeFileAtomic.
-	if err = writeFileAtomic(um.path, data, 0600); err != nil {
+	write := writeFileAtomic
+	if um.writeUsers != nil {
+		write = um.writeUsers
+	}
+	if err = write(um.path, data, 0600); err != nil {
 		return fmt.Errorf("failed to write users file %s: %w", um.path, err) // Include path in error
 	}
 	// Record what we just wrote, so the next save does not mistake our own

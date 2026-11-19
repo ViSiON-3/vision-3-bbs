@@ -151,9 +151,7 @@ func (um *UserMgr) FindAPIDevice(deviceID string) (*User, APIDevice, bool) {
 	defer um.mu.RUnlock()
 	for _, u := range um.users {
 		if d, ok := u.APIDevice(deviceID); ok {
-			userCopy := *u
-			userCopy.TwitList = append([]TwitEntry(nil), u.TwitList...)
-			return &userCopy, d, true
+			return u.Clone(), d, true
 		}
 	}
 	return nil, APIDevice{}, false

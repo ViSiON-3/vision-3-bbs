@@ -67,9 +67,7 @@ func (um *UserMgr) SetCentralConsent(userID int, fn func(u *User)) (*User, error
 	}
 	for _, u := range um.users {
 		if u.ID == userID {
-			out := *u
-			out.TwitList = append([]TwitEntry(nil), u.TwitList...)
-			return &out, nil
+			return u.Clone(), nil
 		}
 	}
 	return nil, ErrUserNotFound

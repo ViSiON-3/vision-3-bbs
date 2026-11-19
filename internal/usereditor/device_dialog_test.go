@@ -93,9 +93,9 @@ func TestDeviceDialogUnpairsAndSaves(t *testing.T) {
 
 // F10 restores from the load-time snapshot, so that copy must not share the
 // device slice with the one being edited.
-func TestCloneUserCopiesDevices(t *testing.T) {
+func TestCloneCopiesDevices(t *testing.T) {
 	u := pairedBob()
-	c := CloneUser(u)
+	c := u.Clone()
 	u.APIDevices[0].Name = "changed"
 	if c.APIDevices[0].Name == "changed" {
 		t.Error("clone shares its device slice")

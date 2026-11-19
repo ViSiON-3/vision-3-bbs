@@ -182,7 +182,7 @@ func NewWithConfig(filePath, configDir string, dataDir ...string) (Model, error)
 	// Snapshot original users for dirty tracking
 	origUsers := make([]*user.User, len(users))
 	for i, u := range users {
-		origUsers[i] = CloneUser(u)
+		origUsers[i] = u.Clone()
 	}
 
 	// Resolve data directory
@@ -1518,7 +1518,7 @@ func (m *Model) beginEditSession() {
 		return
 	}
 	m.editTarget = m.users[m.editIndex]
-	m.editOrig = CloneUser(m.editTarget)
+	m.editOrig = m.editTarget.Clone()
 	m.editBaseDirty = m.dirty
 }
 
@@ -1625,7 +1625,7 @@ func (m *Model) saveAllToDisk(force bool) {
 	// Update original snapshot
 	m.origUsers = make([]*user.User, len(m.users))
 	for i, u := range m.users {
-		m.origUsers[i] = CloneUser(u)
+		m.origUsers[i] = u.Clone()
 	}
 }
 
