@@ -486,11 +486,15 @@ function text() {
   }
 }
 
-// The tune stops however the door ends, an error included.
+// However the door ends, an error included, the tune stops and the caller
+// gets the cursor and a clear screen back.
 try {
   if (!(v3.gfx && v3.gfx.sixel && w >= 80 && h >= 24 && picture())) text();
 } finally {
-  stopTune();
+  try {
+    stopTune();
+  } finally {
+    v3.console.write('\x1b[0m\x1b[?25h');
+    v3.console.clear();
+  }
 }
-v3.console.write('\x1b[0m\x1b[?25h');
-v3.console.clear();

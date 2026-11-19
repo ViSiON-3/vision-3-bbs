@@ -403,9 +403,11 @@ upgraded board does not, until you add it.
   [Viewer doors](files/file-areas.md#viewer-doors).
 - **The Hello door.** `HELLO` in the stock `doors.json` now runs
   `scripts/hello-vision3.js`, an animated greeting. To get it, copy that
-  script into `scripts/` and `hello-vision3-logo.png` and
-  `hello-vision3-palette.png` into `scripts/data/`, then point your
-  `HELLO` entry at it. See
+  script into `scripts/` and `hello-vision3-logo.png`,
+  `hello-vision3-palette.png` and `hello-vision3-tune.b64` (its tune; the
+  door is silent without it) into `scripts/data/`, then set your `HELLO`
+  entry's `script` to `hello-vision3.js` and its `working_directory` to
+  `scripts`. See
   [The Hello door](../scripting/vpl-scripting.md#the-hello-door-hello-vision3js).
 - **PMS theme doors.** The PMS theme's pause prompt runs the `PAUSEBAR`
   door and its Callers command the `AMILC` door. Without them a pause
