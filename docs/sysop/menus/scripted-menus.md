@@ -137,7 +137,7 @@ Commands left out of `v3.menu.items`:
 | `HIDDEN: true` | Hidden commands are not listed on a menu |
 | An `ACS` the caller does not pass | The caller cannot run the command |
 
-Two commands with the same first key are both listed when the caller passes both ACS strings.
+Two commands with the same first key are both listed when the caller passes both ACS strings. Both rows answer the same key. The BBS runs the first command in `.CFG` order that has that key anywhere in its `KEYS` and whose ACS the caller passes, as it does when the caller types the key.
 
 ### What the script answers
 
@@ -185,7 +185,7 @@ These cases end the call or the script instead:
 | The caller's time runs out while the script runs | The time-limit notice is shown and the call ends | `door ended by the BBS` with `"reason":"time limit reached"`, then `time limit reached, disconnecting` |
 | The caller's time ran out before the menu was shown | The call ends before the script would run | `time limit reached, disconnecting` |
 
-A script that answers a command line matching no command sends the caller to the menu's `FALLBACK` menu, as a typed command that matches nothing does; the log records `no command match, using fallback menu`. When `FALLBACK` is the menu itself, as it is for the stock `MAIN`, the script runs again at once. A script that answers that way without waiting for a key runs over and over with no pause until the script, the door or the menu is changed; on a test board it ran about 400 times a second. Check that every answer is a key from `v3.menu.items`.
+A script that answers a command line matching no command is treated as a typed command that matches nothing. With a `FALLBACK` set, the caller goes to that menu and the log records `no command match, using fallback menu`. Without one, the BBS shows its unknown-command string and shows the menu again. When `FALLBACK` is empty or names the menu itself, as it does for the stock `MAIN`, the script runs again at once. A script that answers that way without waiting for a key runs over and over with no pause until the script, the door or the menu is changed; on a test board it ran about 400 times a second.
 
 ---
 
