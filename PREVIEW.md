@@ -115,9 +115,11 @@ With the board on the PMS pre-login set, the matrix shows the graffiti
 picture beside a pink cube on SyncTERM, and a text matrix with keys `L`,
 `A`, `C` and `D` on xterm.
 
-The ViSiON3-Sixel main menu animates while it waits. Measured at a relay
-in front of the board, it sent about 212,000 bytes a second to SyncTERM and
-80,000 to xterm.
+The login matrix and the ViSiON3-Sixel main menu animate while they wait.
+A picture frame goes out only once the terminal has answered for the one
+before last, so a slow terminal gets fewer frames and no backlog. To a
+scripted sixel terminal on the same machine the ViSiON/3 matrix sent about
+13 frames and 270,000 bytes a second.
 
 ## Terminals
 
@@ -128,7 +130,7 @@ in front of the board, it sent about 212,000 bytes a second to SyncTERM and
 
 The matrix tones are sent only to a terminal that answers yes to both audio
 queries (libsndfile present, 8-bit WAV playable). Neither terminal above
-answers yes, so the tones have not been heard from this branch.
+answers yes. SyncTERM 1.10b on macOS does, and I have heard the tones there.
 
 ## What a stock board lacks for the PMS theme
 
@@ -156,9 +158,9 @@ Measured at the branch head against `59dd669d`:
 
 | | Files | Lines |
 |-|-------|-------|
-| Everything | 738 changed, 575 of them new | +38,585, -1,034 |
-| Go code | 142 | +12,410, -740 |
-| Go tests | 101 | +13,288, -94 |
+| Everything | 743 changed, 579 of them new | +40,102, -1,047 |
+| Go code | 144 | +13,167, -752 |
+| Go tests | 104 | +14,125, -95 |
 | Theme files (`menus/vision3`, `menus/pms`) | 409 (199 and 210) | |
 | Scripts (`.js`) | 12 | +5,589 |
 
