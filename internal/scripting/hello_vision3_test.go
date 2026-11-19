@@ -465,7 +465,7 @@ func helloUser() *user.User {
 const (
 	helloLoad  = "\x1b_SyncTERM:A;LoadBlob;S=253;"
 	helloQueue = "\x1b_SyncTERM:A;Queue;C=3;S=253;L\x1b\\"
-	helloFlush = "\x1b_SyncTERM:A;Flush;C=3\x1b\\"
+	helloFlush = "\x1b_SyncTERM:A;Flush;C=3;O=900\x1b\\"
 )
 
 // On a terminal that answered the audio query the door sends the tune once,

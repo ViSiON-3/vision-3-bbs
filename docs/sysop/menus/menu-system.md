@@ -727,8 +727,8 @@ The tune is in the same format and may be up to 4 MiB, a little over three
 minutes. It is sent once the picture has drawn its opening (at once on a
 matrix with no animated picture) and plays through once, on a channel of
 its own so the tones play over it. When it ends the cube stops turning and
-is at rest, a face square to the caller, on its last sound. It is cut off
-when the caller picks a choice. The whole file is sent to each caller whose
+is at rest, a face square to the caller, on its last sound. When the
+caller picks a choice before it ends, it fades out over 0.9 s. The whole file is sent to each caller whose
 terminal plays sound, so a long tune is a long upload on a slow link. Trim
 the silence from both ends of the file; an MP3 decoded to WAV has some at
 each end, and the cube would wait for it.

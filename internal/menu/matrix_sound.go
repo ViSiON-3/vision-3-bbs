@@ -48,6 +48,8 @@ const (
 	matrixMusicSlot     = 248
 	matrixMusicPlaySlot = 249
 	matrixMusicChannel  = 3
+	// matrixMusicFadeMs is how long a tune stopped early takes to fade out.
+	matrixMusicFadeMs = 900
 )
 
 // matrixTones plays the matrix's tones on one session. A nil *matrixTones
@@ -118,7 +120,8 @@ func (t *matrixTones) stopMusic() {
 		return
 	}
 	t.music = false
-	_, _ = fmt.Fprintf(t.w, "\x1b_SyncTERM:A;Flush;C=%d\x1b\\", matrixMusicChannel) // best-effort sound
+	// O= is a fade-out in milliseconds: the tune dies away, it is not cut.
+	_, _ = fmt.Fprintf(t.w, "\x1b_SyncTERM:A;Flush;C=%d;O=%d\x1b\\", matrixMusicChannel, matrixMusicFadeMs) // best-effort sound
 }
 
 // matrixToneFile reads a tone from the theme. A missing file is no tone;

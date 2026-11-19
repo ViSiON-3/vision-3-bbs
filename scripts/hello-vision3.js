@@ -294,7 +294,8 @@ function startTune() {
   tune = true;
 }
 function stopTune() {
-  if (tune) v3.console.write('\x1b_SyncTERM:A;Flush;C=3\x1b\\');
+  // O= is a fade-out in milliseconds, so the tune dies away with the door.
+  if (tune) v3.console.write('\x1b_SyncTERM:A;Flush;C=3;O=900\x1b\\');
   tune = false;
 }
 

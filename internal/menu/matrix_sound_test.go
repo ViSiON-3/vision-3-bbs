@@ -288,7 +288,7 @@ func TestMatrixMusicLoopsAndStops(t *testing.T) {
 	}
 	start := apcAudio + "LoadBlob;S=248;" + base64.StdEncoding.EncodeToString(files[matrixMusicFile]) + "\x1b\\" +
 		apcAudio + "Copy;S=248;D=249\x1b\\" + apcAudio + "Queue;C=3;S=249\x1b\\"
-	stop := apcAudio + "Flush;C=3\x1b\\"
+	stop := apcAudio + "Flush;C=3;O=900\x1b\\"
 	if got := strings.Count(r.raw, start); got != 1 {
 		t.Fatalf("tune loaded and played %d times, want once", got)
 	}
