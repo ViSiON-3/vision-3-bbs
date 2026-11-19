@@ -48,6 +48,7 @@ scripts/                       Root for all VPL scripts
 ├── data/                      Persistent data (v3.data storage)
 │   ├── hello.json             Auto-created per-script JSON stores
 │   └── voting.json
+├── hello-vision3.js           The stock HELLO door
 └── examples/                  Shipped example scripts
     └── hello.js
 ```
@@ -204,6 +205,31 @@ if (v3.console.yesno("|07Leave a message")) {
 
 v3.console.pause();
 ```
+
+## The Hello door: hello-vision3.js
+
+`HELLO` in the stock `doors.json` runs `scripts/hello-vision3.js`, which greets the caller by handle and stays until a key is pressed. `scripts/examples/hello.js` above is the teaching example and no door runs it.
+
+On a terminal that answered the sixel probe (see [v3.gfx](#v3gfx)) the door draws one 640x368 canvas: the logo, the handle in large lettering, a sine scroller with the caller's handle, call count, last call, node and the board's name, copper bars, a starfield and sparks. Every frame goes through `presentDelta()`, so the terminal sets the frame rate.
+
+![The Hello door on a sixel terminal](images/hello-vision3-sixel.png)
+
+On any other terminal it draws 16-colour ANSI on an 80x24 screen: the logo as text, the handle in block letters with the colours cycling, and a wave scroller with the same details. A screen smaller than 80x24 gets the greeting as plain lines.
+
+![The Hello door's ANSI version](images/hello-vision3-ansi.png)
+
+The picture needs two files in `scripts/data/`: `hello-vision3-logo.png` and `hello-vision3-palette.png`. If either is missing the door draws the ANSI version. A handle of up to 13 letters is drawn in block letters on one line of the ANSI version, a longer one on two lines when it splits at a space into parts of 13 or fewer, and otherwise as spaced capitals.
+
+With `v3.gfx.audio` true and `scripts/data/hello-vision3-tune.b64` present, the door also plays that tune, looping, from just after its first frame until the door ends. No tune ships with the board. The file is a WAV (8-bit unsigned PCM, 22050 Hz, mono) as base64 text on one line, at most 4 MiB, which is a WAV of at most 3 MiB, about 142 seconds. Make it from any WAV or MP3 with ffmpeg:
+
+```sh
+ffmpeg -i tune.mp3 -t 120 -map_metadata -1 -fflags +bitexact -ar 22050 -ac 1 -c:a pcm_u8 tune.wav
+base64 -w0 tune.wav > hello-vision3-tune.b64   # macOS: base64 -i tune.wav | tr -d '\n' > ...
+```
+
+The door writes `ESC _ SyncTERM:A;LoadBlob;S=253;<base64> ESC \`, then `ESC _ SyncTERM:A;Queue;C=3;S=253;L ESC \` to play and `ESC _ SyncTERM:A;Flush;C=3 ESC \` to stop, the sequences the login matrix uses for its tones on other slots. A missing or non-WAV file, or a terminal that did not answer the audio query, leaves the door silent and writes no audio bytes. Bytes go to the caller at the caller's link rate: a 2 minute tune is 3.5 MB of base64, and the animation pauses while it goes.
+
+A board installed before this door has the old `HELLO` entry. To switch, copy `scripts/hello-vision3.js` and the two pictures from the release, then set the entry's `script` to `hello-vision3.js` and its `working_directory` to `scripts`.
 
 ## Programming Reference
 
@@ -1122,6 +1148,7 @@ answer. A script should always have a text version to draw.
 | Member | Type | Description |
 |--------|------|-------------|
 | `sixel` | boolean | Whether the caller's terminal draws sixel graphics |
+| `audio` | boolean | Whether the caller's terminal answered the board's audio query at connect: SyncTERM's `libsndfile` query yes, and its `libsndfileFormat` query yes for WAV with 8-bit unsigned PCM. `false` when either answer was no or did not arrive. The terminal's name plays no part. Nothing else about sound is in the engine: a script plays a sound by writing SyncTERM's audio sequences itself, as [the Hello door](#the-hello-door-hello-vision3js) does |
 | `image(path[, palette])` | function | Draws a PNG, GIF (first frame) or JPEG from the script's data directory with its top-left corner at the cursor's cell. Returns `false`, having drawn nothing, when `sixel` is `false` or a file is missing, outside the data directory, not a picture, or more than 1,310,720 pixels (1280x1024) in area. `palette` names a picture whose colours, in the order they first appear, are the colours to draw with |
 | `canvas(width, height[, palette])` | function | Creates a server-side pixel canvas; `palette` is an optional image in the data directory with 1–256 opaque colours. Invalid dimensions, an invalid palette, or a fifth canvas in one script throws an error. |
 

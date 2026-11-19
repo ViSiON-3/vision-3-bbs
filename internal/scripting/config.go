@@ -71,6 +71,9 @@ type SessionContext struct {
 	// Sixel reports that the caller's terminal draws sixel graphics, read
 	// by scripts as v3.gfx.sixel.
 	Sixel bool
+	// Audio reports that the caller's terminal said at connect that it plays
+	// the board's audio format, read by scripts as v3.gfx.audio.
+	Audio bool
 	// Frames paces the canvas's picture frames (see pace.Gate); nil sends
 	// every frame.
 	Frames *pace.Gate

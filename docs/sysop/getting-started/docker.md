@@ -94,7 +94,7 @@ ViSiON/3 uses a pure-Go SSH implementation (`gliderlabs/ssh`) — no CGO or nati
 
 - Builds all Go binaries: `ViSiON3`, `v3mail`, `config`, `strings`, `ue`, `menuedit`, `helper`, `wfc`
 - Ships the default menu set at `/vision3/menus`
-- Ships the stock script doors at `/vision3/scripts/examples`: the text and archive viewers the default `doors.json` names (`TEXTVIEW`, `ARTVIEW`), and the example doors (oneliners, voting and the rest). Script doors that save data (`v3.data`, `v3.fs`) keep it in `/vision3/scripts/data`, which is inside the container: mount a volume there, e.g. `-v "$(pwd)/scripts-data:/vision3/scripts/data"`, to keep it across rebuilds
+- Ships the stock script doors at `/vision3/scripts/examples`: the text and archive viewers the default `doors.json` names (`TEXTVIEW`, `ARTVIEW`), and the example doors (oneliners, voting and the rest). The `HELLO` door, `hello-vision3.js`, is at `/vision3/scripts` with its two pictures in `/vision3/scripts/data`. Script doors that save data (`v3.data`, `v3.fs`) keep it in `/vision3/scripts/data`, which is inside the container: mount a volume there, e.g. `-v "$(pwd)/scripts-data:/vision3/scripts/data"`, to keep it across rebuilds. A volume there hides the `HELLO` door's pictures, and the door draws its ANSI version until `hello-vision3-logo.png` and `hello-vision3-palette.png` are copied into the volume
 - Ships ZipLab's support files, which the entrypoint copies to `ziplab/`
 - Ships `sexyz.ini`, which the entrypoint copies to `bin/`
 

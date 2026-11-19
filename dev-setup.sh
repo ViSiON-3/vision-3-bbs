@@ -192,6 +192,13 @@ if [[ -d "$REPO_DIR/scripts/examples" ]] && [[ ! -d "$TARGET/scripts/examples" ]
     info "Copying example scripts..."
     cp -r "$REPO_DIR/scripts/examples" "$TARGET/scripts/examples"
 fi
+# The HELLO door and its pictures.
+mkdir -p "$TARGET/scripts/data"
+for f in hello-vision3.js data/hello-vision3-logo.png data/hello-vision3-palette.png data/hello-vision3-tune.b64; do
+    if [[ -f "$REPO_DIR/scripts/$f" ]] && [[ ! -e "$TARGET/scripts/$f" ]]; then
+        cp "$REPO_DIR/scripts/$f" "$TARGET/scripts/$f"
+    fi
+done
 
 # ── Infoforms ────────────────────────────────────────────────────
 if [[ -f "$REPO_DIR/templates/infoforms/config.json" ]] && [[ ! -f "$TARGET/data/infoforms/config.json" ]]; then

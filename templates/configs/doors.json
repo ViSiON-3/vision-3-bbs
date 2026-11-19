@@ -2,11 +2,11 @@
     {
         "code": "HELLO",
         "category": "EXAMPLES",
-        "description": "A simple example script door",
-        "name": "Hello World Example",
+        "description": "An animated greeting: a sixel picture, or ANSI",
+        "name": "ViSiON/3 Hello",
         "type": "v3_script",
-        "script": "hello.js",
-        "working_directory": "scripts/examples"
+        "script": "hello-vision3.js",
+        "working_directory": "scripts"
     },
     {
         "code": "ONELINERS",

@@ -66,6 +66,7 @@ func executeV3ScriptDoor(ctx *DoorCtx) error {
 		ScreenHeight:     ctx.User.ScreenHeight,
 		ArtWidth:         artWidth(ctx.Terminal, ctx.User.ScreenWidth),
 		Sixel:            sessionSixel(ctx.Session, ctx.CurrentUser),
+		Audio:            sessionAudio(ctx.Session),
 		NodeNumber:       ctx.NodeNumber,
 		SessionStartTime: ctx.SessionStartTime,
 		ChatCredit:       func() time.Duration { return chatCredit(ctx.Session) },

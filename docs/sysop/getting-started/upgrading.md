@@ -401,6 +401,12 @@ upgraded board does not, until you add it.
   your `doors.json`, and set `archiveViewerDoor` and `textViewerDoor` in
   `config.json`. Left unset, the built-in viewers run as before. See
   [Viewer doors](files/file-areas.md#viewer-doors).
+- **The Hello door.** `HELLO` in the stock `doors.json` now runs
+  `scripts/hello-vision3.js`, an animated greeting. To get it, copy that
+  script into `scripts/` and `hello-vision3-logo.png` and
+  `hello-vision3-palette.png` into `scripts/data/`, then point your
+  `HELLO` entry at it. See
+  [The Hello door](../scripting/vpl-scripting.md#the-hello-door-hello-vision3js).
 - **PMS theme doors.** The PMS theme's pause prompt runs the `PAUSEBAR`
   door and its Callers command the `AMILC` door. Without them a pause
   prints `!PAUSEBAR` and Callers reports the door is not configured. If

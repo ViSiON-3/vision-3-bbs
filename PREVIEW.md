@@ -121,6 +121,18 @@ before last, so a slow terminal gets fewer frames and no backlog. To a
 scripted sixel terminal on the same machine the ViSiON/3 matrix sent about
 13 frames and 270,000 bytes a second.
 
+## The Hello door
+
+`D` then `H` from the main menu, in any of the three themes. On a sixel
+terminal it is an animated canvas: the logo lands, the caller's handle fades
+up and away, then a sine scroller with their details runs over copper bars
+and a starfield. On other terminals it is ANSI block lettering and a text
+scroller. It is all in `scripts/hello-vision3.js`; the only engine change
+for it is `v3.gfx.audio`, which tells a script whether the terminal answered
+the audio query. Where it did, the door plays a two-minute tune of mine from
+`scripts/data/hello-vision3-tune.b64` (3.5 MB, sent to the caller after the
+first frame). Any key leaves.
+
 ## Terminals
 
 | Terminal | Its answer at connect | What the board did |

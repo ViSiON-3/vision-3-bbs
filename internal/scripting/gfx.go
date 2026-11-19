@@ -34,6 +34,7 @@ func registerGfx(v3 *goja.Object, eng *Engine) {
 	obj := vm.NewObject()
 
 	jsutil.Set(obj, "sixel", eng.session.Sixel)
+	jsutil.Set(obj, "audio", eng.session.Audio)
 	registerCanvas(obj, eng)
 
 	// image(path[, palette]) — draw a PNG, GIF or JPEG from the script's

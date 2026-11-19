@@ -76,6 +76,12 @@ COPY menus/ ./menus/
 # the other examples) that the default doors.json runs from scripts/examples.
 COPY scripts/examples/ ./scripts/examples/
 
+# The HELLO door and its pictures. A volume mounted at /vision3/scripts/data
+# hides the pictures, and the door then draws its ANSI version; copy them
+# into the volume to get the picture back.
+COPY scripts/hello-vision3.js ./scripts/
+COPY scripts/data/hello-vision3-logo.png scripts/data/hello-vision3-palette.png scripts/data/hello-vision3-tune.b64 ./scripts/data/
+
 # Create the mount points before declaring them so a named volume inherits
 # vision3 ownership. Bind mounts still arrive owned by the host uid, which the
 # entrypoint corrects at runtime.

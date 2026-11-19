@@ -2,7 +2,7 @@
 
 VPL scripts are JavaScript files that run inside the BBS with access to the caller, the user database, messages and files. They need no external program, no dropfile and no emulator, which makes them the quickest door to set up and a good first one.
 
-Seven ship with every install under `scripts/examples/`, already defined in `configs/doors.json` and wired to the doors menu: a hello-world, one-liners, a voting booth, system stats, an auto-message board, user stats and the last ten callers. This walkthrough adds an eighth.
+Seven ship with every install, already defined in `configs/doors.json` and wired to the doors menu: the [Hello door](../scripting/vpl-scripting.md#the-hello-door-hello-vision3js) in `scripts/`, and under `scripts/examples/` one-liners, a voting booth, system stats, an auto-message board, user stats and the last ten callers. This walkthrough adds an eighth.
 
 ## 1. Write the script
 

@@ -257,7 +257,7 @@ Everything below is for hand-editing `configs/doors.json` and for door authors w
 
 Door programs are stored in `configs/doors.json` as an array. The running BBS reloads the file within a couple of seconds of a change. A malformed file, or a door with an invalid or duplicate `code`, is logged and the previous set of doors stays in use until it is fixed; at startup the same mistake stops the BBS, so keep a copy before editing by hand.
 
-> **Note:** The template `doors.json` ships with seven VPL script doors from `scripts/examples/`. The Synchronet JS runtime and the LORD and LORD II JavaScript games are included in the release bundle under `doors/sbbs/` but are not defined in the template; see [Set up a Synchronet JS door](how-to-guides/door-synchronet-js.md). DOS door games must be obtained separately from BBS archives; the LORD entry below is an example.
+> **Note:** The template `doors.json` ships with seven VPL script doors: `scripts/hello-vision3.js` and six from `scripts/examples/`. The Synchronet JS runtime and the LORD and LORD II JavaScript games are included in the release bundle under `doors/sbbs/` but are not defined in the template; see [Set up a Synchronet JS door](how-to-guides/door-synchronet-js.md). DOS door games must be obtained separately from BBS archives; the LORD entry below is an example.
 
 ```json
 [
