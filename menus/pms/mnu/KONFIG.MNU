@@ -1,0 +1,7 @@
+{
+  "TITLE": "User Konfig",
+  "CLR": true,
+  "USEPROMPT": false,
+  "ACS": "*",
+  "SCRIPT": "submenu.js morph"
+}

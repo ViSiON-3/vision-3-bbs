@@ -1,0 +1,16 @@
+{
+    "TITLE": "Sponsor Area",
+    "CLR": true,
+    "USEPROMPT": true,
+    "PROMPT1": "|08  |15|UH |08/ |07|CC |08/ |07|CAN",
+    "PROMPT2": "|05  pms |08/ |07sponsor |13> |07",
+    "FALLBACK": "MSGMENU",
+    "ACS": "*",
+    "PASS": "",
+    "HELPMENU": "",
+    "FORCEHELPLEVEL": 0,
+    "MES_CONF": 0,
+    "FILE_CONF": 0,
+    "FORCEHOTKEY": false,
+    "SCRIPT": "submenu.js cube"
+}

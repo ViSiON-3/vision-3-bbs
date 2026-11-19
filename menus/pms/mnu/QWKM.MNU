@@ -1,0 +1,16 @@
+{
+    "TITLE": "QWK Offline Mail",
+    "CLR": true,
+    "USEPROMPT": true,
+    "PROMPT1": "|08  |15|UH |08/ |07|TIME |08/ time left |07|TL",
+    "PROMPT2": "|05  pms |08/ |07offline mail |13> |07",
+    "FALLBACK": "MSGMENU",
+    "ACS": "*",
+    "PASS": "",
+    "HELPMENU": "",
+    "FORCEHELPLEVEL": 0,
+    "MES_CONF": 0,
+    "FILE_CONF": 0,
+    "FORCEHOTKEY": false,
+    "SCRIPT": "submenu.js sphere"
+}

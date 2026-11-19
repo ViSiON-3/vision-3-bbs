@@ -1,0 +1,16 @@
+{
+  "TITLE": "Fast Logon",
+  "CLR": true,
+  "USEPROMPT": false,
+  "PROMPT1": " Which one, Ace?",
+  "PROMPT2": "",
+  "FALLBACK": "FASTLOGN",
+  "ACS": "*",
+  "PASS": "",
+  "HELPMENU": "",
+  "FORCEHELPLEVEL": 0,
+  "MES_CONF": 0,
+  "FILE_CONF": 0,
+  "FORCEHOTKEY": false,
+  "SCRIPT": "submenu.js sphere"
+}

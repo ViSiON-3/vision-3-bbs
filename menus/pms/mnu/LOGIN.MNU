@@ -1,0 +1,15 @@
+{
+    "TITLE": "Login",
+    "CLR": true,
+    "USEPROMPT": false,
+    "PROMPT1": "",
+    "PROMPT2": "",
+    "FALLBACK": "LOGIN",
+    "ACS": "",
+    "PASS": "",
+    "HELPMENU": "",
+    "FORCEHELPLEVEL": 0,
+    "MES_CONF": 0,
+    "FILE_CONF": 0,
+    "FORCEHOTKEY": false
+}

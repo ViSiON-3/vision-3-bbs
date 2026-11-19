@@ -1,0 +1,16 @@
+{
+    "TITLE": "V3Net Menu",
+    "CLR": true,
+    "USEPROMPT": true,
+    "PROMPT1": "|08  |15|UH |08/ |07|TIME |08/ time left |07|TL",
+    "PROMPT2": "|05  pms |08/ |07v3net |13> |07",
+    "FALLBACK": "",
+    "ACS": "S255",
+    "PASS": "",
+    "HELPMENU": "",
+    "FORCEHELPLEVEL": 0,
+    "MES_CONF": 0,
+    "FILE_CONF": 0,
+    "FORCEHOTKEY": false,
+    "SCRIPT": "submenu.js morph"
+}

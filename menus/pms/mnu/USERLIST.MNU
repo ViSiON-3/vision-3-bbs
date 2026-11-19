@@ -1,0 +1,7 @@
+{
+  "TITLE": "Crew Directory",
+  "CLR": true,
+  "USEPROMPT": false,
+  "ACS": "*",
+  "SCRIPT": "userlist.js"
+}

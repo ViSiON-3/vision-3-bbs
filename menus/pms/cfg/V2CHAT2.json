@@ -1,0 +1,35 @@
+{
+  "statusColor": 31,
+  "sysop": {
+    "color": 13,
+    "lines": [
+      {"row": 3, "from": 35, "to": 80},
+      {"row": 4, "from": 35, "to": 80},
+      {"row": 5, "from": 35, "to": 80},
+      {"row": 6, "from": 35, "to": 80},
+      {"row": 7, "from": 35, "to": 80},
+      {"row": 8, "from": 35, "to": 80},
+      {"row": 9, "from": 35, "to": 80},
+      {"row": 10, "from": 35, "to": 80},
+      {"row": 11, "from": 35, "to": 80}
+    ]
+  },
+  "caller": {
+    "color": 5,
+    "lines": [
+      {"row": 13, "from": 35, "to": 80},
+      {"row": 14, "from": 35, "to": 80},
+      {"row": 15, "from": 35, "to": 80},
+      {"row": 16, "from": 35, "to": 80},
+      {"row": 17, "from": 35, "to": 80},
+      {"row": 18, "from": 35, "to": 80},
+      {"row": 19, "from": 35, "to": 80},
+      {"row": 20, "from": 35, "to": 80},
+      {"row": 21, "from": 35, "to": 80}
+    ]
+  },
+  "fields": {
+    "sysopName": {"row": 1, "col": 18, "width": 24},
+    "callerName": {"row": 1, "col": 50, "width": 23}
+  }
+}

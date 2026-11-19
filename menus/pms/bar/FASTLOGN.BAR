@@ -1,0 +1,9 @@
+; Configrable Bars Menu System .. just stick this file in the menus directory
+; with the extension .BAR .. file name must match the ???????.ANS file..
+; FORMAT: X,Y,HiLitedColor,RegularColor,HotKey,ReturnValue,HiLitedString
+;
+; Coordinates track the selection list baked into FASTLOGN.ANS (rows 14-17, col 30).
+30,14,93,7,1,1,1. Normal Login
+30,15,93,7,2,2,2. Main Menu
+30,16,93,7,3,3,3. Transfer Menu
+30,17,93,7,4,4,4. Message Menu
