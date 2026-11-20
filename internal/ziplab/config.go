@@ -220,9 +220,13 @@ func (c *Config) IsArchiveSupported(path string) bool {
 // first bytes decide, matched against the archivers' signatures, so a ZIP
 // named NODELIST.Z75 is a ZIP; its name decides only when no signature
 // matches, or when the file can't be read. A type with no archiver behind
-// it is found by its name.
+// it is found by its name. Something there that isn't a regular file (a
+// FIFO, a device, a directory) is no archive, whatever its name.
 func (c *Config) GetArchiveType(path string) (ArchiveType, bool) {
 	if path == "" {
+		return ArchiveType{}, false
+	}
+	if info, err := os.Stat(path); err == nil && !info.Mode().IsRegular() {
 		return ArchiveType{}, false
 	}
 	if len(c.archivers.Archivers) > 0 {

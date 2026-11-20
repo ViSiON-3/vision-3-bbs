@@ -330,6 +330,14 @@ func TestGetArchiveTypeByContent(t *testing.T) {
 	if at, ok := cfg.GetArchiveType(filepath.Join(dir, "NODELIST.Z75")); !ok || !at.Native {
 		t.Errorf("NODELIST.Z75 = %+v, want the native ZIP type", at)
 	}
+	// Something that isn't a regular file is no archive, whatever its name.
+	folder := filepath.Join(dir, "folder.zip")
+	if err := os.Mkdir(folder, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if at, ok := cfg.GetArchiveType(folder); ok || cfg.IsArchiveSupported(folder) {
+		t.Errorf("folder.zip (a directory) = %q, %v; want unsupported", at.ID, ok)
+	}
 }
 
 // A pipeline finds the archive's type once and keeps it: ad removal can

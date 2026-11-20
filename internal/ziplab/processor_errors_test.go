@@ -722,3 +722,52 @@ func TestConfigFileErrors(t *testing.T) {
 		}
 	})
 }
+
+// A misnamed ZIP holding only an advert goes through ad removal, the
+// comment and the include file: removal leaves an empty ZIP that no longer
+// looks like one, and the later steps still treat it as the ZIP it was.
+func TestMisnamedZipEmptiedByAdRemoval(t *testing.T) {
+	dir := t.TempDir()
+	zipPath := filepath.Join(dir, "NODELIST.Z75")
+	writeOrderedZip(t, zipPath, "", []zipEntry{{"OTHERBBS.AD", "call us"}})
+	for name, content := range map[string]string{
+		"REMOVE.TXT":   "OTHERBBS.AD\r\n",
+		"ZCOMMENT.TXT": "Our comment",
+		"BBS.AD":       "Visit our BBS!",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := DefaultConfig()
+	cfg.Steps.IncludeFile.FilePath = "BBS.AD"
+	p := NewProcessor(cfg, dir)
+	workDir, err := p.StepExtract(zipPath)
+	if err != nil {
+		t.Fatalf("StepExtract: %v", err)
+	}
+	defer os.RemoveAll(workDir)
+
+	if _, err := p.StepRemoveAdsAndDIZ(workDir, zipPath); err != nil {
+		t.Fatalf("StepRemoveAdsAndDIZ: %v", err)
+	}
+	if _, got := readZip(t, zipPath); len(got) != 0 {
+		t.Fatalf("after ad removal: %s, want an empty ZIP", entryNames(got))
+	}
+	if _, ok := cfg.GetArchiveType(zipPath); ok {
+		t.Fatal("test premise: the emptied NODELIST.Z75 is still detected")
+	}
+	if err := p.StepAddComment(zipPath); err != nil {
+		t.Fatalf("StepAddComment: %v", err)
+	}
+	if err := p.StepIncludeFile(zipPath); err != nil {
+		t.Fatalf("StepIncludeFile: %v", err)
+	}
+	comment, got := readZip(t, zipPath)
+	if comment != "Our comment" {
+		t.Errorf("comment = %q, want %q", comment, "Our comment")
+	}
+	if len(got) != 1 || got[0] != (zipEntry{"BBS.AD", "Visit our BBS!"}) {
+		t.Errorf("entries = %v, want BBS.AD only", got)
+	}
+}
