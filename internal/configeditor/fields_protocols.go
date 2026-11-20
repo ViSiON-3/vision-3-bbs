@@ -161,22 +161,34 @@ func (m *Model) fieldsArchiver() []fieldDef {
 			Set: func(val string) error { a.Magic = val; return nil },
 		},
 		{
-			Label: "Native", Help: "Use Go native implementation (no external cmd)", Type: ftYesNo, Col: 3, Row: 5, Width: 1,
+			Label: "Magic Offset", Help: "Byte where the signature starts (0 for most; 2 for LHA)", Type: ftInteger, Col: 3, Row: 5, Width: 4, Min: 0, Max: 4096,
+			Get: func() string { return strconv.Itoa(a.MagicOffset) },
+			Set: func(val string) error {
+				n, err := strconv.Atoi(val)
+				if err != nil {
+					return err
+				}
+				a.MagicOffset = n
+				return nil
+			},
+		},
+		{
+			Label: "Native", Help: "Use Go native implementation (no external cmd)", Type: ftYesNo, Col: 3, Row: 6, Width: 1,
 			Get: func() string { return uitext.BoolToYN(a.Native) },
 			Set: func(val string) error { a.Native = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Enabled", Help: "Enable or disable this archiver", Type: ftYesNo, Col: 3, Row: 6, Width: 1,
+			Label: "Enabled", Help: "Enable or disable this archiver", Type: ftYesNo, Col: 3, Row: 7, Width: 1,
 			Get: func() string { return uitext.BoolToYN(a.Enabled) },
 			Set: func(val string) error { a.Enabled = uitext.YNToBool(val); return nil },
 		},
 		{
-			Label: "Pack Cmd", Help: "Command to create archives", Type: ftString, Col: 3, Row: 7, Width: 30,
+			Label: "Pack Cmd", Help: "Command to create archives", Type: ftString, Col: 3, Row: 8, Width: 30,
 			Get: func() string { return a.Pack.Command },
 			Set: func(val string) error { a.Pack.Command = val; return nil },
 		},
 		{
-			Label: "Pack Args", Help: "Args for pack (JSON array, e.g. [\"{ARCHIVE}\",\"{FILES}\"])", Type: ftString, Col: 3, Row: 8, Width: 40,
+			Label: "Pack Args", Help: "Args for pack (JSON array, e.g. [\"{ARCHIVE}\",\"{FILES}\"])", Type: ftString, Col: 3, Row: 9, Width: 40,
 			Get: func() string { return joinArgs(a.Pack.Args) },
 			Set: func(val string) error {
 				args, err := splitArgs(val)
@@ -188,12 +200,12 @@ func (m *Model) fieldsArchiver() []fieldDef {
 			},
 		},
 		{
-			Label: "Unpack Cmd", Help: "Command to extract archives", Type: ftString, Col: 3, Row: 9, Width: 30,
+			Label: "Unpack Cmd", Help: "Command to extract archives", Type: ftString, Col: 3, Row: 10, Width: 30,
 			Get: func() string { return a.Unpack.Command },
 			Set: func(val string) error { a.Unpack.Command = val; return nil },
 		},
 		{
-			Label: "Unpack Args", Help: "Args for unpack (JSON array, e.g. [\"{ARCHIVE}\",\"{OUTDIR}\"])", Type: ftString, Col: 3, Row: 10, Width: 40,
+			Label: "Unpack Args", Help: "Args for unpack (JSON array, e.g. [\"{ARCHIVE}\",\"{OUTDIR}\"])", Type: ftString, Col: 3, Row: 11, Width: 40,
 			Get: func() string { return joinArgs(a.Unpack.Args) },
 			Set: func(val string) error {
 				args, err := splitArgs(val)
@@ -205,12 +217,12 @@ func (m *Model) fieldsArchiver() []fieldDef {
 			},
 		},
 		{
-			Label: "Test Cmd", Help: "Command to test archive integrity", Type: ftString, Col: 3, Row: 11, Width: 30,
+			Label: "Test Cmd", Help: "Command to test archive integrity", Type: ftString, Col: 3, Row: 12, Width: 30,
 			Get: func() string { return a.Test.Command },
 			Set: func(val string) error { a.Test.Command = val; return nil },
 		},
 		{
-			Label: "Test Args", Help: "Args for test (JSON array, e.g. [\"{ARCHIVE}\"])", Type: ftString, Col: 3, Row: 12, Width: 40,
+			Label: "Test Args", Help: "Args for test (JSON array, e.g. [\"{ARCHIVE}\"])", Type: ftString, Col: 3, Row: 13, Width: 40,
 			Get: func() string { return joinArgs(a.Test.Args) },
 			Set: func(val string) error {
 				args, err := splitArgs(val)
@@ -222,12 +234,12 @@ func (m *Model) fieldsArchiver() []fieldDef {
 			},
 		},
 		{
-			Label: "List Cmd", Help: "Command to list archive contents", Type: ftString, Col: 3, Row: 13, Width: 30,
+			Label: "List Cmd", Help: "Command to list archive contents", Type: ftString, Col: 3, Row: 14, Width: 30,
 			Get: func() string { return a.List.Command },
 			Set: func(val string) error { a.List.Command = val; return nil },
 		},
 		{
-			Label: "List Args", Help: "Args for list (JSON array, e.g. [\"{ARCHIVE}\"])", Type: ftString, Col: 3, Row: 14, Width: 40,
+			Label: "List Args", Help: "Args for list (JSON array, e.g. [\"{ARCHIVE}\"])", Type: ftString, Col: 3, Row: 15, Width: 40,
 			Get: func() string { return joinArgs(a.List.Args) },
 			Set: func(val string) error {
 				args, err := splitArgs(val)
@@ -239,12 +251,12 @@ func (m *Model) fieldsArchiver() []fieldDef {
 			},
 		},
 		{
-			Label: "Comment Cmd", Help: "Command to add comment (optional)", Type: ftString, Col: 3, Row: 15, Width: 30,
+			Label: "Comment Cmd", Help: "Command to add comment (optional)", Type: ftString, Col: 3, Row: 16, Width: 30,
 			Get: func() string { return a.Comment.Command },
 			Set: func(val string) error { a.Comment.Command = val; return nil },
 		},
 		{
-			Label: "Comment Args", Help: "Args for comment (JSON array, e.g. [\"{ARCHIVE}\",\"{FILE}\"])", Type: ftString, Col: 3, Row: 16, Width: 40,
+			Label: "Comment Args", Help: "Args for comment (JSON array, e.g. [\"{ARCHIVE}\",\"{FILE}\"])", Type: ftString, Col: 3, Row: 17, Width: 40,
 			Get: func() string { return joinArgs(a.Comment.Args) },
 			Set: func(val string) error {
 				args, err := splitArgs(val)
@@ -256,12 +268,12 @@ func (m *Model) fieldsArchiver() []fieldDef {
 			},
 		},
 		{
-			Label: "AddFile Cmd", Help: "Command to add file to archive (optional)", Type: ftString, Col: 3, Row: 17, Width: 30,
+			Label: "AddFile Cmd", Help: "Command to add file to archive (optional)", Type: ftString, Col: 3, Row: 18, Width: 30,
 			Get: func() string { return a.AddFile.Command },
 			Set: func(val string) error { a.AddFile.Command = val; return nil },
 		},
 		{
-			Label: "AddFile Args", Help: "Args for addFile (JSON array, e.g. [\"{ARCHIVE}\",\"{FILE}\"])", Type: ftString, Col: 3, Row: 18, Width: 40,
+			Label: "AddFile Args", Help: "Args for addFile (JSON array, e.g. [\"{ARCHIVE}\",\"{FILE}\"])", Type: ftString, Col: 3, Row: 19, Width: 40,
 			Get: func() string { return joinArgs(a.AddFile.Args) },
 			Set: func(val string) error {
 				args, err := splitArgs(val)

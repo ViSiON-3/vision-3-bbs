@@ -105,6 +105,8 @@
             "name": "LHA/LZH Archive",
             "extension": ".lha",
             "extensions": [".lzh"],
+            "magic": "2D6C68",
+            "magicOffset": 2,
             "native": false,
             "enabled": false,
             "pack": {

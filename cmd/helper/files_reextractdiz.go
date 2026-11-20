@@ -75,13 +75,21 @@ func cmdFilesReextractDIZ(args []string) {
 			rec := &records[i]
 			totalScanned++
 
-			if !arcCfg.IsSupported(rec.Filename) {
+			// The file's content decides whether it is an archive, its name
+			// only when no signature matches.
+			filePath := filepath.Join(areaDir, rec.Filename)
+			_, isArchive, err := arcCfg.DetectFile(filePath)
+			if os.IsNotExist(err) {
+				if arcCfg.IsSupported(rec.Filename) {
+					fmt.Printf("  MISS  %-40s (file not found on disk)\n", rec.Filename)
+				}
 				continue
 			}
-
-			filePath := filepath.Join(areaDir, rec.Filename)
-			if _, err := os.Stat(filePath); os.IsNotExist(err) {
-				fmt.Printf("  MISS  %-40s (file not found on disk)\n", rec.Filename)
+			if err != nil {
+				fmt.Printf("  ERR   %-40s %v\n", rec.Filename, err)
+				continue
+			}
+			if !isArchive {
 				continue
 			}
 

@@ -164,7 +164,7 @@ func cmdFilesImport(args []string) {
 		}
 
 		var description string
-		if !*noDIZ && arcCfg.IsSupported(name) {
+		if !*noDIZ && arcCfg.IsSupportedFile(srcPath) {
 			diz, dizErr := ziplab.ExtractDIZFromArchive(srcPath, *configDir)
 			if dizErr != nil {
 				fmt.Printf("  WARN  %-40s DIZ extraction failed: %v\n", name, dizErr)

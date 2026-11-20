@@ -61,7 +61,7 @@ func (e *MenuExecutor) registerUploadedFiles(
 		var description string
 		filePath := incomingPath
 
-		if zlErr == nil && zlCfg.Enabled && zlCfg.RunOnUpload && zlCfg.IsArchiveSupported(nf.name) {
+		if zlErr == nil && zlCfg.Enabled && zlCfg.RunOnUpload && zlCfg.IsArchiveSupported(incomingPath) {
 			slog.Info("running ziplab pipeline", "node", nodeNumber, "name", nf.name)
 
 			zlBaseDir := filepath.Join(filepath.Dir(e.RootConfigPath), "ziplab")

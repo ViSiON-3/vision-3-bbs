@@ -5,7 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/ViSiON-3/vision-3-bbs/internal/archiver"
 )
 
 func TestDefaultConfig_AllStepsEnabled(t *testing.T) {
@@ -274,5 +277,90 @@ func TestTemplateMatchesDefaults(t *testing.T) {
 	}
 	if want := DefaultConfig(); !reflect.DeepEqual(cfg, want) {
 		t.Errorf("templates/configs/ziplab.json differs from DefaultConfig:\n got  %+v\n want %+v", cfg, want)
+	}
+}
+
+// The archive type comes from the file's content: a ZIP named NODELIST.Z75
+// is a native ZIP, a .zip that is really a RAR is a RAR, and the name
+// decides only when no signature matches or the file can't be read (#594).
+func TestGetArchiveTypeByContent(t *testing.T) {
+	cfgDir := t.TempDir()
+	arc := archiver.DefaultConfig()
+	for i := range arc.Archivers {
+		if arc.Archivers[i].ID == "rar" {
+			arc.Archivers[i].Enabled = true
+		}
+	}
+	data, err := json.Marshal(arc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "archivers.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(cfgDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	for _, tt := range []struct {
+		path, want string
+	}{
+		{write("NODELIST.Z75", "PK\x03\x04rest"), "zip"},
+		{write("misnamed.zip", "Rar!\x1a\x07\x00rest"), "rar"},
+		{write("plain.zip", "not an archive"), "zip"},
+		{write("notes.txt", "PK is not at the start"), ""},
+		{filepath.Join(dir, "missing.rar"), "rar"},
+	} {
+		at, ok := cfg.GetArchiveType(tt.path)
+		if ok != (tt.want != "") || at.ID != tt.want {
+			t.Errorf("%s: got %q, %v; want %q", filepath.Base(tt.path), at.ID, ok, tt.want)
+		}
+		if got := cfg.IsArchiveSupported(tt.path); got != (tt.want != "") {
+			t.Errorf("%s: IsArchiveSupported = %v", filepath.Base(tt.path), got)
+		}
+	}
+	if at, ok := cfg.GetArchiveType(filepath.Join(dir, "NODELIST.Z75")); !ok || !at.Native {
+		t.Errorf("NODELIST.Z75 = %+v, want the native ZIP type", at)
+	}
+	// Something that isn't a regular file is no archive, whatever its name.
+	folder := filepath.Join(dir, "folder.zip")
+	if err := os.Mkdir(folder, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if at, ok := cfg.GetArchiveType(folder); ok || cfg.IsArchiveSupported(folder) {
+		t.Errorf("folder.zip (a directory) = %q, %v; want unsupported", at.ID, ok)
+	}
+}
+
+// A pipeline finds the archive's type once and keeps it: ad removal can
+// rewrite a ZIP holding only an advert into an empty one, whose first bytes
+// (PK\x05\x06) no longer match ZIP's signature, and the later steps must
+// still take it for the ZIP it was, whatever it is named.
+func TestProcessorKeepsArchiveType(t *testing.T) {
+	cfg := DefaultConfig()
+	path := filepath.Join(t.TempDir(), "NODELIST.Z75")
+	if err := os.WriteFile(path, []byte("PK\x03\x04rest"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	p := NewProcessor(cfg, t.TempDir())
+	if at, ok := p.archiveType(path); !ok || at.ID != "zip" {
+		t.Fatalf("first look: %+v, %v", at, ok)
+	}
+	if err := os.WriteFile(path, []byte("PK\x05\x06"+strings.Repeat("\x00", 18)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := cfg.GetArchiveType(path); ok {
+		t.Fatal("test premise: an empty ZIP named .Z75 is still detected")
+	}
+	if at, ok := p.archiveType(path); !ok || at.ID != "zip" {
+		t.Errorf("after the rewrite: %+v, %v", at, ok)
 	}
 }

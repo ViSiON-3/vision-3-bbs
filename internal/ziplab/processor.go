@@ -26,6 +26,12 @@ import (
 type Processor struct {
 	config  Config
 	baseDir string // Base directory for resolving relative paths
+	// types are the archive types found for each archive, by path. A
+	// type is found once, at the first step, and kept: ad removal can
+	// rewrite a ZIP into one whose first bytes no longer look like one
+	// (an empty ZIP starts PK\x05\x06), and the later steps must still
+	// treat it as what it was.
+	types map[string]ArchiveType
 }
 
 // NewProcessor creates a new ZipLab processor.
@@ -33,7 +39,24 @@ func NewProcessor(cfg Config, baseDir string) *Processor {
 	return &Processor{
 		config:  cfg,
 		baseDir: baseDir,
+		types:   map[string]ArchiveType{},
 	}
+}
+
+// archiveType is the archive type of the file at path, found by
+// Config.GetArchiveType the first time a step asks and kept after.
+func (p *Processor) archiveType(path string) (ArchiveType, bool) {
+	if at, ok := p.types[path]; ok {
+		return at, true
+	}
+	at, ok := p.config.GetArchiveType(path)
+	if ok {
+		if p.types == nil {
+			p.types = map[string]ArchiveType{}
+		}
+		p.types[path] = at
+	}
+	return at, ok
 }
 
 // resolvePath resolves a config file path against baseDir when relative.
@@ -53,7 +76,7 @@ func (p *Processor) StepTestIntegrity(archivePath string) error {
 		return nil
 	}
 
-	at, ok := p.config.GetArchiveType(archivePath)
+	at, ok := p.archiveType(archivePath)
 	if !ok {
 		return fmt.Errorf("unsupported archive type: %s", filepath.Ext(archivePath))
 	}
@@ -72,7 +95,7 @@ func (p *Processor) StepExtract(archivePath string) (string, error) {
 		return "", nil
 	}
 
-	at, ok := p.config.GetArchiveType(archivePath)
+	at, ok := p.archiveType(archivePath)
 	if !ok {
 		return "", fmt.Errorf("unsupported archive type: %s", filepath.Ext(archivePath))
 	}
@@ -134,7 +157,7 @@ func (p *Processor) StepRemoveAdsAndDIZ(workDir, archivePath string) (string, er
 
 	// Remove matching files from the archive itself
 	if len(patterns) > 0 && archivePath != "" {
-		at, ok := p.config.GetArchiveType(archivePath)
+		at, ok := p.archiveType(archivePath)
 		if ok && at.Native {
 			if err := p.removeFilesFromZip(archivePath, patterns); err != nil {
 				slog.Warn("failed to remove ad files from archive", "error", err)
@@ -152,7 +175,7 @@ func (p *Processor) StepAddComment(archivePath string) error {
 		return nil
 	}
 
-	at, ok := p.config.GetArchiveType(archivePath)
+	at, ok := p.archiveType(archivePath)
 	if !ok {
 		return fmt.Errorf("unsupported archive type: %s", filepath.Ext(archivePath))
 	}
@@ -178,7 +201,7 @@ func (p *Processor) StepIncludeFile(archivePath string) error {
 		return nil
 	}
 
-	at, ok := p.config.GetArchiveType(archivePath)
+	at, ok := p.archiveType(archivePath)
 	if !ok {
 		return fmt.Errorf("unsupported archive type: %s", filepath.Ext(archivePath))
 	}

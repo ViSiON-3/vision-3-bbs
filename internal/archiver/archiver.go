@@ -40,9 +40,14 @@ type Archiver struct {
 	// The primary Extension is always included implicitly.
 	Extensions []string `json:"extensions,omitempty"`
 
-	// Magic is the hex-encoded magic bytes at offset 0 for format detection.
-	// e.g. "504B0304" for ZIP (PK\x03\x04). Empty means extension-only detection.
+	// Magic is the hex-encoded magic bytes for format detection, at
+	// MagicOffset, e.g. "504B0304" for ZIP (PK\x03\x04). Empty means
+	// extension-only detection.
 	Magic string `json:"magic,omitempty"`
+
+	// MagicOffset is where in the file Magic sits: 0 for most formats, 2
+	// for LHA, whose "-lh" method ID follows a two-byte header.
+	MagicOffset int `json:"magicOffset,omitempty"`
 
 	// Native means this format is handled by Go's stdlib (currently only ZIP).
 	// When true, external command fields are ignored for basic operations.
@@ -224,12 +229,14 @@ func DefaultConfig() Config {
 				},
 			},
 			{
-				ID:         "lha",
-				Name:       "LHA/LZH Archive",
-				Extension:  ".lha",
-				Extensions: []string{".lzh"},
-				Native:     false,
-				Enabled:    false,
+				ID:          "lha",
+				Name:        "LHA/LZH Archive",
+				Extension:   ".lha",
+				Extensions:  []string{".lzh"},
+				Magic:       "2D6C68",
+				MagicOffset: 2,
+				Native:      false,
+				Enabled:     false,
 				Pack: CommandDef{
 					Command: "lha",
 					Args:    []string{"a", "{ARCHIVE}", "{FILES}"},
@@ -349,16 +356,19 @@ func (c *Config) IsSupported(filename string) bool {
 	return ok
 }
 
-// DetectFile identifies an enabled archive by its configured offset-zero magic,
-// falling back to its extension when no signature matches. It reads at most the
-// longest valid configured signature; detection does not validate the archive.
-// Invalid hex signatures are ignored. File open/read errors are returned without
-// extension fallback so callers can distinguish inaccessible files from unknowns.
+// DetectFile identifies an enabled archive by its configured magic, at its
+// MagicOffset, falling back to its extension when no signature matches. It
+// reads only as far as the furthest valid signature ends; detection does not
+// validate the archive. Invalid hex signatures and negative offsets are
+// ignored. File open/read errors are returned without extension fallback so
+// callers can distinguish inaccessible files from unknowns. A file that
+// isn't a regular file (a FIFO, a device, a directory) is never opened and
+// is not an archive, whatever its name.
 func (c *Config) DetectFile(path string) (Archiver, bool, error) {
 	signatures := make([][]byte, len(c.Archivers))
 	maxSize := 0
 	for i, a := range c.Archivers {
-		if !a.Enabled {
+		if !a.Enabled || a.MagicOffset < 0 {
 			continue
 		}
 		signature, err := hex.DecodeString(a.Magic)
@@ -366,9 +376,17 @@ func (c *Config) DetectFile(path string) (Archiver, bool, error) {
 			continue
 		}
 		signatures[i] = signature
-		if len(signature) > maxSize {
-			maxSize = len(signature)
-		}
+		maxSize = max(maxSize, a.MagicOffset+len(signature))
+	}
+	// Only a regular file is read, or can be an archive: opening a FIFO
+	// waits for a writer, and a device or directory is no archive,
+	// whatever its name.
+	info, err := os.Stat(path)
+	if err != nil {
+		return Archiver{}, false, err
+	}
+	if !info.Mode().IsRegular() {
+		return Archiver{}, false, nil
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -382,10 +400,19 @@ func (c *Config) DetectFile(path string) (Archiver, bool, error) {
 	}
 	header = header[:n]
 	for i, signature := range signatures {
-		if len(signature) > 0 && bytes.HasPrefix(header, signature) {
+		at := c.Archivers[i].MagicOffset
+		if len(signature) > 0 && len(header) >= at && bytes.HasPrefix(header[at:], signature) {
 			return c.Archivers[i], true, nil
 		}
 	}
 	a, ok := c.FindByExtension(path)
 	return a, ok, nil
+}
+
+// IsSupportedFile reports whether the file at path is an archive an enabled
+// archiver handles, by DetectFile: its content first, then its name. A file
+// that can't be read is not.
+func (c *Config) IsSupportedFile(path string) bool {
+	_, ok, err := c.DetectFile(path)
+	return err == nil && ok
 }

@@ -260,6 +260,15 @@ func TestExtractDIZFromArchive(t *testing.T) {
 		}
 	})
 
+	t.Run("a ZIP named for a FidoNet nodelist", func(t *testing.T) {
+		zipPath := filepath.Join(t.TempDir(), "NODELIST.Z75")
+		writeOrderedZip(t, zipPath, "", []zipEntry{{"FILE_ID.DIZ", "Nodelist for day 75\r\n"}})
+		got, err := ExtractDIZFromArchive(zipPath, t.TempDir())
+		if err != nil || got != "Nodelist for day 75" {
+			t.Errorf("ExtractDIZFromArchive = %q, %v; want the DIZ text", got, err)
+		}
+	})
+
 	t.Run("broken ziplab.json falls back to defaults", func(t *testing.T) {
 		cfgDir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(cfgDir, "ziplab.json"), []byte("{broken"), 0644); err != nil {
